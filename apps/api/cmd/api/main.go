@@ -15,11 +15,13 @@ import (
 
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/adminapi"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/auth"
+	"github.com/quocdaijr/qdjr-admin/apps/api/internal/categories"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/config"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/db"
 	apphttp "github.com/quocdaijr/qdjr-admin/apps/api/internal/http"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/posts"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/rbac"
+	"github.com/quocdaijr/qdjr-admin/apps/api/internal/tags"
 )
 
 func main() {
@@ -62,6 +64,8 @@ func run(log *slog.Logger) error {
 	// Public posts API: prefix media storage paths with the Supabase public
 	// storage URL so the FE can render thumbnails directly.
 	postsRepo := posts.NewRepository(pool, cfg.SupabaseURL+"/storage/v1/object/public/")
+	categoriesRepo := categories.NewRepository(pool)
+	tagsRepo := tags.NewRepository(pool)
 
 	if cfg.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)
@@ -76,6 +80,8 @@ func run(log *slog.Logger) error {
 		},
 		RegisterPublic: func(g *gin.RouterGroup) {
 			posts.RegisterPublic(g, postsRepo)
+			categories.RegisterPublic(g, categoriesRepo, postsRepo)
+			tags.RegisterPublic(g, tagsRepo, postsRepo)
 		},
 	})
 
