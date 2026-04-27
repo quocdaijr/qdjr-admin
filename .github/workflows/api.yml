@@ -1,0 +1,90 @@
+name: api
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/api/**'
+      - '.github/workflows/api.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'apps/api/**'
+      - '.github/workflows/api.yml'
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  test:
+    name: test + lint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/api
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache: true
+          cache-dependency-path: apps/api/go.sum
+
+      - name: Test
+        run: go test -race ./...
+
+      - name: Lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          working-directory: apps/api
+
+  deploy:
+    name: build + deploy
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ secrets.GCP_REGION }}-docker.pkg.dev --quiet
+
+      - name: Build image
+        run: |
+          docker build \
+            -t ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT }}/${{ secrets.GCP_AR_REPO }}/qdjr-admin-api:${{ github.sha }} \
+            apps/api
+
+      - name: Push image
+        run: |
+          docker push \
+            ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT }}/${{ secrets.GCP_AR_REPO }}/qdjr-admin-api:${{ github.sha }}
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy qdjr-admin-api \
+            --image ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT }}/${{ secrets.GCP_AR_REPO }}/qdjr-admin-api:${{ github.sha }} \
+            --region asia-southeast1 \
+            --platform managed \
+            --allow-unauthenticated \
+            --cpu 1 --memory 256Mi --max-instances 10 \
+            --set-env-vars "^|^ENV=production|SUPABASE_URL=${{ secrets.SUPABASE_URL_PROD }}|PORT=8080|CORS_ORIGINS=https://qdjr.me,https://admin.qdjr.me" \
+            --set-secrets "DATABASE_URL=DATABASE_URL:latest,SUPABASE_JWT_SECRET=SUPABASE_JWT_SECRET:latest,SUPABASE_SERVICE_ROLE_KEY=SUPABASE_SERVICE_ROLE_KEY:latest,SUPABASE_JWKS_URL=SUPABASE_JWKS_URL:latest"
+
+      - name: Smoke test
+        run: |
+          curl --fail --silent https://api.qdjr.me/healthz \
+            || curl --fail --silent "$(gcloud run services describe qdjr-admin-api --region asia-southeast1 --format='value(status.url)')/healthz"
