@@ -1,0 +1,53 @@
+# --- env / secrets ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+service-account*.json
+.secrets/
+
+# --- OS / editors ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*~
+
+# --- Go ---
+apps/api/bin/
+apps/api/tmp/
+apps/api/coverage.out
+apps/api/coverage.html
+apps/api/*.test
+apps/api/dist/
+
+# --- Node / Next.js ---
+node_modules/
+.next/
+.turbo/
+.vercel/
+.pnpm-store/
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+.eslintcache
+
+# --- Supabase ---
+supabase/.branches/
+supabase/.temp/
+supabase/.env
+
+# --- Build / coverage ---
+coverage/
+dist/
+build/
+
+# --- Local DB / docker volumes ---
+.docker/
+postgres-data/
+
+# --- Claude Code local-only ---
+.claude/settings.local.json
