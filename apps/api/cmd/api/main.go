@@ -26,6 +26,7 @@ import (
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/rbac"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/sitesettings"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/tags"
+	"github.com/quocdaijr/qdjr-admin/apps/api/internal/users"
 )
 
 func main() {
@@ -83,6 +84,8 @@ func run(log *slog.Logger) error {
 	contactLimiter := contact.NewLimiter()
 	mediaAdminRepo := media.NewAdminRepository(pool, storagePrefix)
 	mediaStorage := media.NewStorageClient(cfg.SupabaseURL, cfg.SupabaseServiceRoleKey, "media")
+	usersRepo := users.NewAdminRepository(pool)
+	usersSupa := users.NewSupabaseAdminClient(cfg.SupabaseURL, cfg.SupabaseServiceRoleKey)
 	if err := mediaStorage.EnsureBucket(ctx); err != nil {
 		log.Warn("media bucket ensure failed (continuing)", "err", err)
 	}
@@ -109,6 +112,8 @@ func run(log *slog.Logger) error {
 				ContactAdmin:    contactAdminRepo,
 				MediaAdmin:      mediaAdminRepo,
 				MediaStorage:    mediaStorage,
+				UsersAdmin:      usersRepo,
+				UsersSupabase:   usersSupa,
 			})
 		},
 		RegisterPublic: func(g *gin.RouterGroup) {
