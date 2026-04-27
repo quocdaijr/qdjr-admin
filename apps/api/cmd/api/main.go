@@ -78,6 +78,7 @@ func run(log *slog.Logger) error {
 	siteRepo := sitesettings.NewRepository(pool)
 	siteAdminRepo := sitesettings.NewAdminRepository(pool)
 	contactRepo := contact.NewRepository(pool)
+	contactAdminRepo := contact.NewAdminRepository(pool)
 	contactLimiter := contact.NewLimiter()
 	// Background eviction lives with the process; pass context.Background()
 	// because RegisterPublic doesn't get the run-loop context.
@@ -99,6 +100,7 @@ func run(log *slog.Logger) error {
 				TagsAdmin:       tagsAdminRepo,
 				ProfileAdmin:    profileAdminRepo,
 				SettingsAdmin:   siteAdminRepo,
+				ContactAdmin:    contactAdminRepo,
 			})
 		},
 		RegisterPublic: func(g *gin.RouterGroup) {

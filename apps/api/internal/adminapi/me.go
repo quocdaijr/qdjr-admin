@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/categories"
+	"github.com/quocdaijr/qdjr-admin/apps/api/internal/contact"
 	apphttp "github.com/quocdaijr/qdjr-admin/apps/api/internal/http"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/posts"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/profile"
@@ -25,6 +26,7 @@ type Deps struct {
 	TagsAdmin       tags.AdminWriter
 	ProfileAdmin    *profile.AdminRepository
 	SettingsAdmin   *sitesettings.AdminRepository
+	ContactAdmin    *contact.AdminRepository
 }
 
 // Register attaches admin endpoints to the given group. Plan 2 wires per-
@@ -45,6 +47,9 @@ func Register(g *gin.RouterGroup, deps Deps) {
 	}
 	if deps.SettingsAdmin != nil {
 		sitesettings.RegisterAdmin(g, deps.SettingsAdmin, deps.Resolver)
+	}
+	if deps.ContactAdmin != nil {
+		contact.RegisterAdmin(g, deps.ContactAdmin, deps.Resolver)
 	}
 }
 
