@@ -46,11 +46,16 @@ export interface Media {
   created_at: string;
 }
 
+// Profile shape returned by both public GET /v1/profile and admin
+// GET /v1/admin/profile. The BE returns avatar_url (resolved public URL).
+// Admin PATCH accepts avatar_id (media UUID) which is therefore optional and
+// only used in update payloads, not responses.
 export interface Profile {
   id: number;
   full_name: string | null;
   bio: string | null;
   avatar_url: string | null;
+  avatar_id?: string | null;
   tagline: string | null;
   social_links: Record<string, string>;
   location: string | null;

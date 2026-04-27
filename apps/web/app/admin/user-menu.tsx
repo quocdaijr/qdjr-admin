@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { LogOut } from 'lucide-react';
 import { toast } from 'sonner';
@@ -18,8 +18,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 
 import { signOut, type AuthUser } from '@/lib/auth';
-import { apiGet, ApiError } from '@/lib/api';
-import type { Me } from '@/lib/types';
+import { useMe } from '@/lib/me';
 
 interface UserMenuProps {
   user: AuthUser;
@@ -27,36 +26,8 @@ interface UserMenuProps {
 
 export function UserMenu({ user }: UserMenuProps) {
   const router = useRouter();
-  const [me, setMe] = useState<Me | null>(null);
-  const [loadingMe, setLoadingMe] = useState(true);
+  const meQuery = useMe();
   const [signingOut, setSigningOut] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const data = await apiGet<Me>('/v1/admin/me');
-        if (!cancelled) setMe(data);
-      } catch (err) {
-        if (!cancelled) {
-          if (err instanceof ApiError) {
-            // 401 means session expired — UserMenu only renders when auth is gated,
-            // but surface non-auth errors for visibility.
-            if (err.status !== 401) {
-              toast.error(`Failed to load profile: ${err.message}`);
-            }
-          } else if (err instanceof Error) {
-            toast.error(err.message);
-          }
-        }
-      } finally {
-        if (!cancelled) setLoadingMe(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const handleSignOut = async () => {
     setSigningOut(true);
@@ -71,9 +42,11 @@ export function UserMenu({ user }: UserMenuProps) {
     }
   };
 
+  const me = meQuery.data;
+
   return (
     <div className="flex items-center gap-2">
-      {loadingMe ? (
+      {meQuery.isLoading ? (
         <Skeleton className="h-5 w-16" />
       ) : me?.role ? (
         <Badge variant="secondary">{me.role}</Badge>
@@ -94,10 +67,7 @@ export function UserMenu({ user }: UserMenuProps) {
             </div>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
-          <DropdownMenuItem
-            onClick={handleSignOut}
-            disabled={signingOut}
-          >
+          <DropdownMenuItem onClick={handleSignOut} disabled={signingOut}>
             <LogOut className="size-4" aria-hidden="true" />
             <span>{signingOut ? 'Signing out…' : 'Sign out'}</span>
           </DropdownMenuItem>
