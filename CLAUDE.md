@@ -39,3 +39,10 @@ cd apps/web && cp .env.example .env && pnpm dev             # UI on :3000 (Plan 
 
 - Design spec: `docs/superpowers/specs/2026-04-27-qdjr-admin-design.md`
 - Active plan: `docs/superpowers/plans/2026-04-27-qdjr-admin-foundation.md`
+
+## Deploy
+
+- `git push origin main` triggers three GH Actions: `api.yml` (test → build → push → Cloud Run), `migrations.yml` (Supabase db push), `web.yml` (PR checks; Vercel auto-deploys main from its own integration).
+- Tail Cloud Run logs: `gcloud run services logs read qdjr-admin-api --region=asia-southeast1 --limit 200`.
+- Manual deploy (skip CI): `gcloud run deploy qdjr-admin-api --region asia-southeast1 --source apps/api`.
+- See `infra/dns/README.md` for DNS records and `docs/superpowers/setup/2026-04-27-deployment-checklist.md` for one-time platform setup.

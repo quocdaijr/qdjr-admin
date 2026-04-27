@@ -292,3 +292,12 @@ qdjr-admin/
 - Comments, newsletter, search beyond `q` substring filter, analytics dashboards, multi-language.
 - Custom admin theme branding beyond shadcn defaults.
 - Stronger integrity for singleton tables beyond `check (id = 1)`.
+
+## Lessons learned (Plans 1-2)
+
+- **Local Supabase JWT signing**: the new local stack uses asymmetric ES256 keys, not the legacy HS256 shared secret. The Go BE supports both, but `SUPABASE_JWKS_URL` MUST be set locally for `/v1/admin/me` to authorize. The legacy `SUPABASE_JWT_SECRET` only works for old Supabase projects or testing.
+- **Next.js 16 dynamic params**: `params` in dynamic routes (e.g., `app/posts/[id]/page.tsx`) is now `Promise<{...}>`. Always `await params` first.
+- **shadcn moved off Radix to base-ui**: composition uses `render={<Button>...</Button>}` not `asChild`. Select `onValueChange` returns `T | null`. Account for both at every callsite.
+- **Posts admin "publish" semantics**: silent downgrade only on Create (per spec); PATCH `status: published` without `posts:publish` returns 403.
+- **Singleton tables (profile, site_settings)**: enforced via `id smallint primary key default 1 check (id = 1)`. Do not parameterize the id.
+- **Migration source of truth**: `supabase/migrations/*.sql` only. Go BE never owns schema; never call `goose` or `migrate` from main.
