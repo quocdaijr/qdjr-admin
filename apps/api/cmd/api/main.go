@@ -17,10 +17,13 @@ import (
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/auth"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/categories"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/config"
+	"github.com/quocdaijr/qdjr-admin/apps/api/internal/contact"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/db"
 	apphttp "github.com/quocdaijr/qdjr-admin/apps/api/internal/http"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/posts"
+	"github.com/quocdaijr/qdjr-admin/apps/api/internal/profile"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/rbac"
+	"github.com/quocdaijr/qdjr-admin/apps/api/internal/sitesettings"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/tags"
 )
 
@@ -63,9 +66,17 @@ func run(log *slog.Logger) error {
 
 	// Public posts API: prefix media storage paths with the Supabase public
 	// storage URL so the FE can render thumbnails directly.
-	postsRepo := posts.NewRepository(pool, cfg.SupabaseURL+"/storage/v1/object/public/")
+	storagePrefix := cfg.SupabaseURL + "/storage/v1/object/public/"
+	postsRepo := posts.NewRepository(pool, storagePrefix)
 	categoriesRepo := categories.NewRepository(pool)
 	tagsRepo := tags.NewRepository(pool)
+	profileRepo := profile.NewRepository(pool, storagePrefix)
+	siteRepo := sitesettings.NewRepository(pool)
+	contactRepo := contact.NewRepository(pool)
+	contactLimiter := contact.NewLimiter()
+	// Background eviction lives with the process; pass context.Background()
+	// because RegisterPublic doesn't get the run-loop context.
+	go contactLimiter.StartEvictor(context.Background())
 
 	if cfg.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)
@@ -82,6 +93,9 @@ func run(log *slog.Logger) error {
 			posts.RegisterPublic(g, postsRepo)
 			categories.RegisterPublic(g, categoriesRepo, postsRepo)
 			tags.RegisterPublic(g, tagsRepo, postsRepo)
+			profile.RegisterPublic(g, profileRepo)
+			sitesettings.RegisterPublic(g, siteRepo)
+			contact.RegisterPublic(g, contactRepo, contactLimiter)
 		},
 	})
 
