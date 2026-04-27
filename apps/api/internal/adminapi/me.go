@@ -9,6 +9,7 @@ import (
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/categories"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/contact"
 	apphttp "github.com/quocdaijr/qdjr-admin/apps/api/internal/http"
+	"github.com/quocdaijr/qdjr-admin/apps/api/internal/media"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/posts"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/profile"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/rbac"
@@ -27,6 +28,8 @@ type Deps struct {
 	ProfileAdmin    *profile.AdminRepository
 	SettingsAdmin   *sitesettings.AdminRepository
 	ContactAdmin    *contact.AdminRepository
+	MediaAdmin      *media.AdminRepository
+	MediaStorage    *media.StorageClient
 }
 
 // Register attaches admin endpoints to the given group. Plan 2 wires per-
@@ -50,6 +53,9 @@ func Register(g *gin.RouterGroup, deps Deps) {
 	}
 	if deps.ContactAdmin != nil {
 		contact.RegisterAdmin(g, deps.ContactAdmin, deps.Resolver)
+	}
+	if deps.MediaAdmin != nil && deps.MediaStorage != nil {
+		media.RegisterAdmin(g, deps.MediaAdmin, deps.MediaStorage, deps.Resolver)
 	}
 }
 

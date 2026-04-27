@@ -20,6 +20,7 @@ import (
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/contact"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/db"
 	apphttp "github.com/quocdaijr/qdjr-admin/apps/api/internal/http"
+	"github.com/quocdaijr/qdjr-admin/apps/api/internal/media"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/posts"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/profile"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/rbac"
@@ -80,6 +81,11 @@ func run(log *slog.Logger) error {
 	contactRepo := contact.NewRepository(pool)
 	contactAdminRepo := contact.NewAdminRepository(pool)
 	contactLimiter := contact.NewLimiter()
+	mediaAdminRepo := media.NewAdminRepository(pool, storagePrefix)
+	mediaStorage := media.NewStorageClient(cfg.SupabaseURL, cfg.SupabaseServiceRoleKey, "media")
+	if err := mediaStorage.EnsureBucket(ctx); err != nil {
+		log.Warn("media bucket ensure failed (continuing)", "err", err)
+	}
 	// Background eviction lives with the process; pass context.Background()
 	// because RegisterPublic doesn't get the run-loop context.
 	go contactLimiter.StartEvictor(context.Background())
@@ -101,6 +107,8 @@ func run(log *slog.Logger) error {
 				ProfileAdmin:    profileAdminRepo,
 				SettingsAdmin:   siteAdminRepo,
 				ContactAdmin:    contactAdminRepo,
+				MediaAdmin:      mediaAdminRepo,
+				MediaStorage:    mediaStorage,
 			})
 		},
 		RegisterPublic: func(g *gin.RouterGroup) {
