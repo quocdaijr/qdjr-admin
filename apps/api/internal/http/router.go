@@ -1,3 +1,4 @@
+// apps/api/internal/http/router.go
 package http
 
 import (
@@ -8,17 +9,23 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/quocdaijr/qdjr-admin/apps/api/internal/auth"
 )
 
-// RouterDeps wires runtime dependencies into the HTTP layer. New deps land here
-// rather than as global state.
+// RouterDeps wires runtime dependencies into the HTTP layer.
 type RouterDeps struct {
 	Pool        *pgxpool.Pool
 	CORSOrigins []string
+	Verifier    auth.Verifier
+	// RegisterAdmin attaches admin handlers to the protected /v1/admin group.
+	// Kept as a callback to avoid an import cycle between http and adminapi.
+	RegisterAdmin func(*gin.RouterGroup)
+	// RegisterPublic attaches unauthenticated /v1 handlers (used by Plan 2).
+	RegisterPublic func(*gin.RouterGroup)
 }
 
-// NewRouter builds the Gin engine with the standard middleware stack and
-// registers /healthz and /readyz. Resource routes are added by Plan 2.
+// NewRouter builds the Gin engine.
 func NewRouter(deps RouterDeps) *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Recovery(), corsMiddleware(deps.CORSOrigins))
@@ -37,6 +44,15 @@ func NewRouter(deps RouterDeps) *gin.Engine {
 		}
 		c.JSON(http.StatusOK, gin.H{"status": "ok", "db": "ok"})
 	})
+
+	v1 := r.Group("/v1")
+	if deps.RegisterPublic != nil {
+		deps.RegisterPublic(v1)
+	}
+	if deps.RegisterAdmin != nil && deps.Verifier != nil {
+		admin := v1.Group("/admin", RequireAuth(deps.Verifier))
+		deps.RegisterAdmin(admin)
+	}
 
 	return r
 }
