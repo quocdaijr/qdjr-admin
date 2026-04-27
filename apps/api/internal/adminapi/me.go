@@ -11,6 +11,7 @@ import (
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/posts"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/profile"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/rbac"
+	"github.com/quocdaijr/qdjr-admin/apps/api/internal/sitesettings"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/tags"
 )
 
@@ -23,6 +24,7 @@ type Deps struct {
 	CategoriesAdmin categories.AdminWriter
 	TagsAdmin       tags.AdminWriter
 	ProfileAdmin    *profile.AdminRepository
+	SettingsAdmin   *sitesettings.AdminRepository
 }
 
 // Register attaches admin endpoints to the given group. Plan 2 wires per-
@@ -40,6 +42,9 @@ func Register(g *gin.RouterGroup, deps Deps) {
 	}
 	if deps.ProfileAdmin != nil {
 		profile.RegisterAdmin(g, deps.ProfileAdmin, deps.Resolver)
+	}
+	if deps.SettingsAdmin != nil {
+		sitesettings.RegisterAdmin(g, deps.SettingsAdmin, deps.Resolver)
 	}
 }
 

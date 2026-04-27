@@ -76,6 +76,7 @@ func run(log *slog.Logger) error {
 	profileRepo := profile.NewRepository(pool, storagePrefix)
 	profileAdminRepo := profile.NewAdminRepository(pool, storagePrefix)
 	siteRepo := sitesettings.NewRepository(pool)
+	siteAdminRepo := sitesettings.NewAdminRepository(pool)
 	contactRepo := contact.NewRepository(pool)
 	contactLimiter := contact.NewLimiter()
 	// Background eviction lives with the process; pass context.Background()
@@ -97,6 +98,7 @@ func run(log *slog.Logger) error {
 				CategoriesAdmin: categoriesAdminRepo,
 				TagsAdmin:       tagsAdminRepo,
 				ProfileAdmin:    profileAdminRepo,
+				SettingsAdmin:   siteAdminRepo,
 			})
 		},
 		RegisterPublic: func(g *gin.RouterGroup) {
