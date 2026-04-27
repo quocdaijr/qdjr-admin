@@ -1,0 +1,9 @@
+.git
+.github
+.idea
+.vscode
+**/*.md
+**/testdata
+**/tmp
+**/*.test
+coverage.out
