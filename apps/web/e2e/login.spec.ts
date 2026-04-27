@@ -6,7 +6,8 @@ const ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD ?? 'ChangeMeNow123!';
 test('admin can log in and sees super_admin badge', async ({ page }) => {
   await page.goto('/login');
 
-  await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
+  // The card title renders as a div, not a heading — match by text + the form button by role.
+  await expect(page.getByText('Sign in', { exact: true }).first()).toBeVisible();
 
   await page.getByLabel('Email').fill(ADMIN_EMAIL);
   await page.getByLabel('Password').fill(ADMIN_PASSWORD);

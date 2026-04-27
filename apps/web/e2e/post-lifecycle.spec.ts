@@ -39,8 +39,10 @@ test('post lifecycle: create category, create post, publish, verify, delete', as
   await categoryDialog.getByRole('button', { name: 'Create' }).click();
 
   await expect(categoryDialog).toBeHidden({ timeout: 10_000 });
+  // Both Name and Slug columns render the same text — use .first() to avoid
+  // strict-mode violations.
   await expect(
-    page.getByRole('cell', { name: categoryName, exact: true })
+    page.getByRole('cell', { name: categoryName, exact: true }).first()
   ).toBeVisible({ timeout: 10_000 });
 
   // --- Step 2: Create post ---
@@ -50,10 +52,9 @@ test('post lifecycle: create category, create post, publish, verify, delete', as
   await page.getByPlaceholder('Post title').fill(postTitle);
   await page.getByPlaceholder('Write your post…').fill('Hello E2E');
 
-  // Category select: open the trigger for the Category field, then click the
-  // option matching our newly-created category. The trigger is identified by
-  // its placeholder text "Select category".
-  await page.getByText('Select category').click();
+  // Category combobox shows "Uncategorized" by default. Locate it by current
+  // displayed text and pick our newly-created category.
+  await page.getByRole('combobox').filter({ hasText: 'Uncategorized' }).click();
   await page.getByRole('option', { name: categoryName, exact: true }).click();
 
   // Status defaults to "draft" already, no change needed.
@@ -71,16 +72,16 @@ test('post lifecycle: create category, create post, publish, verify, delete', as
   ).toBeVisible({ timeout: 10_000 });
 
   // --- Step 4: Verify via public API ---
+  // The public endpoint returns ONLY published posts — a 200 here is proof of
+  // publication. The response shape does not include `status` (admin-only field).
   const apiResponse = await request.get(`${API_BASE}/v1/posts/${postSlug}`);
   expect(apiResponse.status()).toBe(200);
   const body = (await apiResponse.json()) as {
-    data?: { status?: string; slug?: string };
-    status?: string;
-    slug?: string;
+    data?: { slug?: string; published_at?: string | null };
   };
-  const post = body.data ?? body;
-  expect(post.slug).toBe(postSlug);
-  expect(post.status).toBe('published');
+  const post = body.data;
+  expect(post?.slug).toBe(postSlug);
+  expect(post?.published_at).toBeTruthy();
 
   // --- Step 5: Cleanup — delete post via UI ---
   await page.getByRole('button', { name: 'Delete' }).click();
@@ -101,5 +102,5 @@ test('post lifecycle: create category, create post, publish, verify, delete', as
   await expect(catDeleteDialog).toBeHidden({ timeout: 10_000 });
   await expect(
     page.getByRole('cell', { name: categoryName, exact: true })
-  ).toHaveCount(0);
+  ).toHaveCount(0, { timeout: 10_000 });
 });
