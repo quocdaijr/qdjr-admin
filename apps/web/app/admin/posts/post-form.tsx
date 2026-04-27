@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -62,18 +62,21 @@ interface PostFormProps {
 }
 
 function defaultValues(post?: Post): PostFormValues {
+  // Admin endpoint returns `categories[]` (full list); public returns `category`
+  // (single, derived). Prefer the admin shape when present.
+  const categoryIds =
+    post?.categories?.map((c) => c.id) ??
+    (post?.category ? [post.category.id] : []);
   return {
     title: post?.title ?? '',
     slug: post?.slug ?? '',
     excerpt: post?.excerpt ?? '',
     content: post?.content ?? '',
     status: post?.status ?? 'draft',
-    thumbnail_id:
-      (post as (Post & { thumbnail_id?: string | null }) | undefined)
-        ?.thumbnail_id ?? null,
-    meta_title: '',
-    meta_description: '',
-    category_ids: post?.category ? [post.category.id] : [],
+    thumbnail_id: post?.thumbnail_id ?? null,
+    meta_title: post?.meta_title ?? '',
+    meta_description: post?.meta_description ?? '',
+    category_ids: categoryIds,
     tag_ids: post?.tags?.map((t) => t.id) ?? [],
   };
 }
@@ -89,11 +92,20 @@ export function PostForm({ initial }: PostFormProps) {
     control,
     watch,
     setValue,
-    formState: { errors, isSubmitting },
+    reset,
+    formState: { errors, isSubmitting, isDirty },
   } = useForm<PostFormValues>({
     resolver: zodResolver(schema),
     defaultValues: defaultValues(initial),
   });
+
+  // Re-sync the form when the underlying post is refetched (e.g. after a
+  // publish mutation invalidates the query) — but only if the user hasn't
+  // started editing, to avoid clobbering in-progress changes.
+  useEffect(() => {
+    if (!initial || isDirty) return;
+    reset(defaultValues(initial));
+  }, [initial, isDirty, reset]);
 
   const titleValue = watch('title');
   const slugValue = watch('slug');
@@ -134,6 +146,9 @@ export function PostForm({ initial }: PostFormProps) {
       apiPatch<Post>(`/v1/admin/posts/${initial!.id}`, toApiBody(values)),
     onSuccess: (post) => {
       toast.success('Post saved');
+      // Re-baseline the form to the freshly-saved values so isDirty resets
+      // and future refetches (e.g. publish) can re-sync via the effect above.
+      reset(defaultValues(post));
       queryClient.invalidateQueries({ queryKey: ['posts'] });
       queryClient.invalidateQueries({ queryKey: ['post', post.id] });
     },
@@ -218,7 +233,13 @@ export function PostForm({ initial }: PostFormProps) {
               render={({ field }) => (
                 <Select value={field.value} onValueChange={field.onChange}>
                   <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Status" />
+                    <SelectValue placeholder="Status">
+                      {(value: string) =>
+                        value
+                          ? value.charAt(0).toUpperCase() + value.slice(1)
+                          : 'Status'
+                      }
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="draft">Draft</SelectItem>
@@ -267,7 +288,16 @@ export function PostForm({ initial }: PostFormProps) {
                       }
                     >
                       <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Select category" />
+                        <SelectValue placeholder="Select category">
+                          {(value: string) => {
+                            if (!value || value === UNCATEGORIZED)
+                              return 'Uncategorized';
+                            return (
+                              categories.find((c) => c.id === value)?.name ??
+                              value
+                            );
+                          }}
+                        </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value={UNCATEGORIZED}>

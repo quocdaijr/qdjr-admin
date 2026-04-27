@@ -51,3 +51,7 @@ postgres-data/
 
 # --- Claude Code local-only ---
 .claude/settings.local.json
+.playwright-mcp/
+apps/web/test-results/
+apps/web/playwright-report/
+smoke-*.png

@@ -1,3 +1,7 @@
+// Post matches both public (GET /v1/posts) and admin (GET /v1/admin/posts)
+// shapes. Public uses `category` (single, derived) and `thumbnail` (resolved URL);
+// admin uses `categories[]` (full list) and `thumbnail_id` (raw FK). All
+// admin-only fields are optional so the type covers both endpoints.
 export interface Post {
   id: string;
   slug: string;
@@ -5,11 +9,20 @@ export interface Post {
   excerpt: string | null;
   content: string;
   published_at: string | null;
-  thumbnail: { url: string; alt: string | null } | null;
-  category: { id: string; slug: string; name: string } | null;
+  // Public-only:
+  thumbnail?: { url: string; alt: string | null } | null;
+  category?: { id: string; slug: string; name: string } | null;
+  // Admin-only:
+  categories?: { id: string; slug: string; name: string; description: string | null; created_at: string; updated_at: string }[];
+  thumbnail_id?: string | null;
+  og_image_id?: string | null;
+  meta_title?: string | null;
+  meta_description?: string | null;
+  // Shared:
   tags: { id: string; slug: string; name: string }[];
   status?: 'draft' | 'published' | 'archived';
   created_by?: string | null;
+  updated_by?: string | null;
   created_at: string;
   updated_at: string;
 }
