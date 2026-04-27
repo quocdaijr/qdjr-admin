@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/quocdaijr/qdjr-admin/apps/api/internal/categories"
 	apphttp "github.com/quocdaijr/qdjr-admin/apps/api/internal/http"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/posts"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/rbac"
@@ -15,8 +16,9 @@ import (
 // new admin resource means adding a field here (kept clean: handlers live in
 // their own packages).
 type Deps struct {
-	Resolver   rbac.PermissionResolver
-	PostsAdmin posts.AdminWriter
+	Resolver        rbac.PermissionResolver
+	PostsAdmin      posts.AdminWriter
+	CategoriesAdmin categories.AdminWriter
 }
 
 // Register attaches admin endpoints to the given group. Plan 2 wires per-
@@ -25,6 +27,9 @@ func Register(g *gin.RouterGroup, deps Deps) {
 	g.GET("/me", meHandler(deps.Resolver))
 	if deps.PostsAdmin != nil {
 		posts.RegisterAdmin(g, deps.PostsAdmin, deps.Resolver)
+	}
+	if deps.CategoriesAdmin != nil {
+		categories.RegisterAdmin(g, deps.CategoriesAdmin, deps.Resolver)
 	}
 }
 

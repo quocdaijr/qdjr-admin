@@ -22,6 +22,12 @@ func validSlug(s string) bool {
 // lowercased before this regex runs.
 var nonAlphaNum = regexp.MustCompile(`[^a-z0-9]+`)
 
+// Slugify is the exported form of slugify (used by other admin packages).
+func Slugify(s string) string { return slugify(s) }
+
+// ValidSlug is the exported form of validSlug (used by other admin packages).
+func ValidSlug(s string) bool { return validSlug(s) }
+
 // slugify lowercases s, replaces every run of non-[a-z0-9] characters with a
 // single '-', and trims leading/trailing '-'. Output is truncated to 200 chars
 // at a hyphen boundary when possible. May return "" if no usable chars.

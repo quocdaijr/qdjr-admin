@@ -70,6 +70,7 @@ func run(log *slog.Logger) error {
 	postsRepo := posts.NewRepository(pool, storagePrefix)
 	postsAdminRepo := posts.NewAdminRepository(pool)
 	categoriesRepo := categories.NewRepository(pool)
+	categoriesAdminRepo := categories.NewAdminRepository(pool)
 	tagsRepo := tags.NewRepository(pool)
 	profileRepo := profile.NewRepository(pool, storagePrefix)
 	siteRepo := sitesettings.NewRepository(pool)
@@ -89,8 +90,9 @@ func run(log *slog.Logger) error {
 		Verifier:    verifier,
 		RegisterAdmin: func(g *gin.RouterGroup) {
 			adminapi.Register(g, adminapi.Deps{
-				Resolver:   resolver,
-				PostsAdmin: postsAdminRepo,
+				Resolver:        resolver,
+				PostsAdmin:      postsAdminRepo,
+				CategoriesAdmin: categoriesAdminRepo,
 			})
 		},
 		RegisterPublic: func(g *gin.RouterGroup) {
