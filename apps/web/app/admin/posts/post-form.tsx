@@ -31,6 +31,7 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover';
 import { Checkbox } from '@/components/ui/checkbox';
+import { MediaPicker } from '@/components/media-picker';
 
 import { PostActions } from './post-actions';
 
@@ -230,20 +231,16 @@ export function PostForm({ initial }: PostFormProps) {
           </FormField>
 
           <FormField
-            label="Thumbnail media id"
-            hint="Paste a media UUID. The picker comes in Task 20."
+            label="Thumbnail"
             error={errors.thumbnail_id?.message as string | undefined}
           >
             <Controller
               control={control}
               name="thumbnail_id"
               render={({ field }) => (
-                <Input
-                  value={field.value ?? ''}
-                  onChange={(e) =>
-                    field.onChange(e.target.value === '' ? null : e.target.value)
-                  }
-                  placeholder="00000000-0000-0000-0000-000000000000"
+                <MediaPicker
+                  value={field.value ?? null}
+                  onChange={(id) => field.onChange(id)}
                 />
               )}
             />
