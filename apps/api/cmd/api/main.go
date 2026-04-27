@@ -30,18 +30,30 @@ import (
 )
 
 func main() {
-	log := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	if err := run(log); err != nil {
-		log.Error("fatal", "err", err)
+	if err := run(); err != nil {
+		// Bootstrap logger for fatal errors that occur before run() builds its own.
+		bootstrap := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+		bootstrap.Error("fatal", "err", err)
 		os.Exit(1)
 	}
 }
 
-func run(log *slog.Logger) error {
+// newLogger returns a JSON slog.Logger whose level reflects the runtime
+// environment: INFO in production (filters debug noise), DEBUG elsewhere.
+func newLogger(env string) *slog.Logger {
+	level := slog.LevelDebug
+	if env == "production" {
+		level = slog.LevelInfo
+	}
+	return slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: level}))
+}
+
+func run() error {
 	cfg, err := config.LoadFromOS()
 	if err != nil {
 		return err
 	}
+	log := newLogger(cfg.Env)
 	log.Info("config loaded", "env", cfg.Env, "port", cfg.Port)
 
 	ctx, cancel := context.WithCancel(context.Background())
