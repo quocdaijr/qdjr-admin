@@ -7,13 +7,25 @@ import (
 	"github.com/gin-gonic/gin"
 
 	apphttp "github.com/quocdaijr/qdjr-admin/apps/api/internal/http"
+	"github.com/quocdaijr/qdjr-admin/apps/api/internal/posts"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/rbac"
 )
 
-// Register attaches admin endpoints to the given group. Plan 1 only registers
-// /me; Plan 2 expands this with per-resource handlers.
-func Register(g *gin.RouterGroup, res rbac.PermissionResolver) {
-	g.GET("/me", meHandler(res))
+// Deps bundles cross-package dependencies the admin router needs. Adding a
+// new admin resource means adding a field here (kept clean: handlers live in
+// their own packages).
+type Deps struct {
+	Resolver   rbac.PermissionResolver
+	PostsAdmin posts.AdminWriter
+}
+
+// Register attaches admin endpoints to the given group. Plan 2 wires per-
+// resource handlers (posts CRUD, etc.) alongside /me.
+func Register(g *gin.RouterGroup, deps Deps) {
+	g.GET("/me", meHandler(deps.Resolver))
+	if deps.PostsAdmin != nil {
+		posts.RegisterAdmin(g, deps.PostsAdmin, deps.Resolver)
+	}
 }
 
 func meHandler(res rbac.PermissionResolver) gin.HandlerFunc {

@@ -68,6 +68,7 @@ func run(log *slog.Logger) error {
 	// storage URL so the FE can render thumbnails directly.
 	storagePrefix := cfg.SupabaseURL + "/storage/v1/object/public/"
 	postsRepo := posts.NewRepository(pool, storagePrefix)
+	postsAdminRepo := posts.NewAdminRepository(pool)
 	categoriesRepo := categories.NewRepository(pool)
 	tagsRepo := tags.NewRepository(pool)
 	profileRepo := profile.NewRepository(pool, storagePrefix)
@@ -87,7 +88,10 @@ func run(log *slog.Logger) error {
 		CORSOrigins: cfg.CORSOrigins,
 		Verifier:    verifier,
 		RegisterAdmin: func(g *gin.RouterGroup) {
-			adminapi.Register(g, resolver)
+			adminapi.Register(g, adminapi.Deps{
+				Resolver:   resolver,
+				PostsAdmin: postsAdminRepo,
+			})
 		},
 		RegisterPublic: func(g *gin.RouterGroup) {
 			posts.RegisterPublic(g, postsRepo)

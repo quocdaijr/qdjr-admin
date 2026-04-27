@@ -48,7 +48,7 @@ func TestMe_ReturnsUserAndRole(t *testing.T) {
 
 	r := gin.New()
 	g := r.Group("/v1/admin", apphttp.RequireAuth(v))
-	Register(g, res)
+	Register(g, Deps{Resolver: res})
 
 	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"sub":   uid.String(),
