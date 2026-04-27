@@ -18,6 +18,7 @@ import (
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/config"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/db"
 	apphttp "github.com/quocdaijr/qdjr-admin/apps/api/internal/http"
+	"github.com/quocdaijr/qdjr-admin/apps/api/internal/posts"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/rbac"
 )
 
@@ -58,6 +59,10 @@ func run(log *slog.Logger) error {
 
 	resolver := rbac.NewStatic(rbac.NewPGStore(pool))
 
+	// Public posts API: prefix media storage paths with the Supabase public
+	// storage URL so the FE can render thumbnails directly.
+	postsRepo := posts.NewRepository(pool, cfg.SupabaseURL+"/storage/v1/object/public/")
+
 	if cfg.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -68,6 +73,9 @@ func run(log *slog.Logger) error {
 		Verifier:    verifier,
 		RegisterAdmin: func(g *gin.RouterGroup) {
 			adminapi.Register(g, resolver)
+		},
+		RegisterPublic: func(g *gin.RouterGroup) {
+			posts.RegisterPublic(g, postsRepo)
 		},
 	})
 
