@@ -72,6 +72,7 @@ func run(log *slog.Logger) error {
 	categoriesRepo := categories.NewRepository(pool)
 	categoriesAdminRepo := categories.NewAdminRepository(pool)
 	tagsRepo := tags.NewRepository(pool)
+	tagsAdminRepo := tags.NewAdminRepository(pool)
 	profileRepo := profile.NewRepository(pool, storagePrefix)
 	siteRepo := sitesettings.NewRepository(pool)
 	contactRepo := contact.NewRepository(pool)
@@ -93,6 +94,7 @@ func run(log *slog.Logger) error {
 				Resolver:        resolver,
 				PostsAdmin:      postsAdminRepo,
 				CategoriesAdmin: categoriesAdminRepo,
+				TagsAdmin:       tagsAdminRepo,
 			})
 		},
 		RegisterPublic: func(g *gin.RouterGroup) {

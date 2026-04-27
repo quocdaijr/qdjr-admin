@@ -10,6 +10,7 @@ import (
 	apphttp "github.com/quocdaijr/qdjr-admin/apps/api/internal/http"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/posts"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/rbac"
+	"github.com/quocdaijr/qdjr-admin/apps/api/internal/tags"
 )
 
 // Deps bundles cross-package dependencies the admin router needs. Adding a
@@ -19,6 +20,7 @@ type Deps struct {
 	Resolver        rbac.PermissionResolver
 	PostsAdmin      posts.AdminWriter
 	CategoriesAdmin categories.AdminWriter
+	TagsAdmin       tags.AdminWriter
 }
 
 // Register attaches admin endpoints to the given group. Plan 2 wires per-
@@ -30,6 +32,9 @@ func Register(g *gin.RouterGroup, deps Deps) {
 	}
 	if deps.CategoriesAdmin != nil {
 		categories.RegisterAdmin(g, deps.CategoriesAdmin, deps.Resolver)
+	}
+	if deps.TagsAdmin != nil {
+		tags.RegisterAdmin(g, deps.TagsAdmin, deps.Resolver)
 	}
 }
 
