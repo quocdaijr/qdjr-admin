@@ -9,6 +9,7 @@ import (
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/categories"
 	apphttp "github.com/quocdaijr/qdjr-admin/apps/api/internal/http"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/posts"
+	"github.com/quocdaijr/qdjr-admin/apps/api/internal/profile"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/rbac"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/tags"
 )
@@ -21,6 +22,7 @@ type Deps struct {
 	PostsAdmin      posts.AdminWriter
 	CategoriesAdmin categories.AdminWriter
 	TagsAdmin       tags.AdminWriter
+	ProfileAdmin    *profile.AdminRepository
 }
 
 // Register attaches admin endpoints to the given group. Plan 2 wires per-
@@ -35,6 +37,9 @@ func Register(g *gin.RouterGroup, deps Deps) {
 	}
 	if deps.TagsAdmin != nil {
 		tags.RegisterAdmin(g, deps.TagsAdmin, deps.Resolver)
+	}
+	if deps.ProfileAdmin != nil {
+		profile.RegisterAdmin(g, deps.ProfileAdmin, deps.Resolver)
 	}
 }
 
