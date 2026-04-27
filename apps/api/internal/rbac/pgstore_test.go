@@ -24,10 +24,12 @@ func TestPGStore_RoleForUser(t *testing.T) {
 	defer pool.Close()
 
 	// Insert a fake auth.users row; in real life Supabase Auth owns this.
+	// Use a per-run unique email so reruns don't collide on users_email_partial_key.
 	uid := uuid.New()
+	email := "store-test+" + uid.String() + "@example.com"
 	_, err = pool.Exec(ctx,
-		`insert into auth.users (id, email) values ($1, $2)`,
-		uid, "store-test@example.com")
+		`insert into auth.users (id, email, created_at) values ($1, $2, now())`,
+		uid, email)
 	require.NoError(t, err)
 	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), `delete from auth.users where id = $1`, uid) })
 
