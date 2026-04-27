@@ -1,0 +1,8 @@
+apps/api/
+supabase/
+cmsqdjr/
+qdjr/
+docs/
+infra/
+.github/
+*.md
