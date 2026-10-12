@@ -2,6 +2,7 @@ package profile
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/google/uuid"
 )
@@ -21,6 +22,7 @@ type UpdateInput struct {
 	SocialLinks *map[string]string
 	Location    *string
 	Email       *string
+	Content     *json.RawMessage // nil = unchanged; otherwise a JSON object
 	UpdatedBy   uuid.UUID
 }
 

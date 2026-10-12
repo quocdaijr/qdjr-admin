@@ -74,6 +74,9 @@ func (s *stubAdminRepo) Update(_ context.Context, in UpdateInput) (Profile, erro
 		}
 		s.current.SocialLinks = cp
 	}
+	if in.Content != nil {
+		s.current.Content = append(json.RawMessage(nil), (*in.Content)...)
+	}
 	return s.current, nil
 }
 
@@ -231,4 +234,43 @@ func TestAdminProfile_MissingAuth(t *testing.T) {
 	rr := httptest.NewRecorder()
 	r.ServeHTTP(rr, req)
 	assert.Equal(t, http.StatusUnauthorized, rr.Code)
+}
+
+func TestAdminProfile_Update_Content_OK(t *testing.T) {
+	env := newAdminEnv("profile:write")
+	body := `{"content":{"vi":{"profile":{"name":"Đại"}},"en":{}}}`
+	rr := env.doRaw(t, http.MethodPatch, "/v1/admin/profile", body)
+	require.Equal(t, http.StatusOK, rr.Code, rr.Body.String())
+	require.True(t, env.repo.updated)
+	require.NotNil(t, env.repo.updateIn.Content)
+	assert.JSONEq(t, `{"vi":{"profile":{"name":"Đại"}},"en":{}}`, string(*env.repo.updateIn.Content))
+
+	var resp struct {
+		Data Profile `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &resp))
+	assert.JSONEq(t, `{"vi":{"profile":{"name":"Đại"}},"en":{}}`, string(resp.Data.Content))
+}
+
+func TestAdminProfile_Update_Content_RejectsNonObject(t *testing.T) {
+	for _, raw := range []string{`{"content":[1,2]}`, `{"content":"x"}`, `{"content":null}`, `{"content":7}`} {
+		env := newAdminEnv("profile:write")
+		rr := env.doRaw(t, http.MethodPatch, "/v1/admin/profile", raw)
+		assert.Equal(t, http.StatusBadRequest, rr.Code, raw)
+		assert.False(t, env.repo.updated, raw)
+	}
+}
+
+func TestParseContent(t *testing.T) {
+	got, err := parseContent(nil)
+	require.NoError(t, err)
+	assert.Nil(t, got)
+
+	got, err = parseContent(json.RawMessage(`{"a":1}`))
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	assert.JSONEq(t, `{"a":1}`, string(*got))
+
+	_, err = parseContent(json.RawMessage(`null`))
+	assert.Error(t, err)
 }

@@ -41,21 +41,21 @@ func newFixture(t *testing.T) *fixture {
 	var (
 		fullName, bio, tagline, location, email *string
 		avatarID                                *uuid.UUID
-		socialLinks                             []byte
+		socialLinks, content                    []byte
 	)
 	err = pool.QueryRow(ctx,
-		`select full_name, bio, avatar_id, tagline, social_links, location, email
+		`select full_name, bio, avatar_id, tagline, social_links, location, email, content
 		   from public.profile where id = 1`,
-	).Scan(&fullName, &bio, &avatarID, &tagline, &socialLinks, &location, &email)
+	).Scan(&fullName, &bio, &avatarID, &tagline, &socialLinks, &location, &email, &content)
 	require.NoError(t, err)
 
 	t.Cleanup(func() {
 		bg := context.Background()
 		_, _ = pool.Exec(bg,
 			`update public.profile set full_name=$1, bio=$2, avatar_id=$3,
-			   tagline=$4, social_links=$5::jsonb, location=$6, email=$7
+			   tagline=$4, social_links=$5::jsonb, location=$6, email=$7, content=$8::jsonb
 			 where id = 1`,
-			fullName, bio, avatarID, tagline, socialLinks, location, email,
+			fullName, bio, avatarID, tagline, socialLinks, location, email, content,
 		)
 	})
 

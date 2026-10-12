@@ -30,19 +30,20 @@ func NewRepository(pool *pgxpool.Pool, urlPrefix string) *Repository {
 func (r *Repository) Get(ctx context.Context) (Profile, error) {
 	const q = `
         SELECT p.id, p.full_name, p.bio, m.storage_path, p.tagline,
-               p.social_links, p.location, p.email, p.updated_at
+               p.social_links, p.location, p.email, p.content, p.updated_at
         FROM public.profile p
         LEFT JOIN public.media m ON m.id = p.avatar_id
         WHERE p.id = 1`
 
 	var (
-		out         Profile
-		avatarPath  *string
-		socialBytes []byte
+		out          Profile
+		avatarPath   *string
+		socialBytes  []byte
+		contentBytes []byte
 	)
 	err := r.pool.QueryRow(ctx, q).Scan(
 		&out.ID, &out.FullName, &out.Bio, &avatarPath, &out.Tagline,
-		&socialBytes, &out.Location, &out.Email, &out.UpdatedAt,
+		&socialBytes, &out.Location, &out.Email, &contentBytes, &out.UpdatedAt,
 	)
 	if err != nil {
 		return Profile{}, fmt.Errorf("profile get: %w", err)
@@ -59,6 +60,7 @@ func (r *Repository) Get(ctx context.Context) (Profile, error) {
 			return Profile{}, fmt.Errorf("profile decode social_links: %w", err)
 		}
 	}
+	out.Content = normalizeContent(contentBytes)
 	return out, nil
 }
 
