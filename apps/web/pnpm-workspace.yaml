@@ -5,6 +5,9 @@ allowBuilds:
   workerd: true
   msw: false
   unrs-resolver: false
+  # buf's bin shim resolves the platform binary from its optional deps; the
+  # postinstall only pre-checks it. Blocked so CI installs stay script-free.
+  "@bufbuild/buf": false
 ignoredBuiltDependencies:
   - sharp
   - unrs-resolver
