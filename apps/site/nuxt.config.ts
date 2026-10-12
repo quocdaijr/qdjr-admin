@@ -29,11 +29,9 @@ export default defineNuxtConfig({
     // Public keys (exposed to client-side)
     public: {
       baseUrl: process.env.APP_URL || 'https://qdjr.dev',
-      // Empty by default: api.qdjr.me no longer resolves (NXDOMAIN). An empty
-      // value makes every $api call short-circuit to an empty result with zero
-      // network traffic, instead of a multi-second DNS failure on each
-      // navigation. Set API_URL to re-enable the legacy blog surface.
-      apiUrl: process.env.API_URL || '',
+      // qdjr-admin API (apps/api). Netlify sets API_URL; local dev uses the Go
+      // server on :8080.
+      apiUrl: process.env.API_URL || 'https://api.qdjr.dev',
       gaId: process.env.GOOGLE_ANALYTICS_ID || 'G-KBZQ6KNY8T'
     }
   },
