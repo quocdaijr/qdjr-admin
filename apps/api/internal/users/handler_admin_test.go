@@ -360,7 +360,7 @@ func TestAdminUsers_Delete_Self_LastSuperAdmin_Conflict(t *testing.T) {
 
 	rr := env.do(t, caller, http.MethodDelete, "/v1/admin/users/"+caller.String(), nil)
 	require.Equal(t, http.StatusConflict, rr.Code)
-	assert.Empty(t, env.acc.deleteCalls, "must not call Supabase delete when blocked")
+	assert.Empty(t, env.acc.deleteCalls, "must not delete the account when blocked")
 }
 
 func TestAdminUsers_Delete_OtherUser_NoContent(t *testing.T) {

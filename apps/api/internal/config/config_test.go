@@ -66,3 +66,52 @@ func TestLoad_RejectsWeakOrMalformedSecrets(t *testing.T) {
 func envGetter(m map[string]string) func(string) string {
 	return func(k string) string { return m[k] }
 }
+
+func TestLoad_MediaStorage(t *testing.T) {
+	base := map[string]string{"DATABASE_URL": "postgres://x", "JWT_SECRET": goodSecret}
+	with := func(extra map[string]string) map[string]string {
+		m := map[string]string{}
+		for k, v := range base {
+			m[k] = v
+		}
+		for k, v := range extra {
+			m[k] = v
+		}
+		return m
+	}
+
+	t.Run("development defaults to a local folder served by the API", func(t *testing.T) {
+		c, err := Load(envGetter(with(map[string]string{"PORT": "9000"})))
+		require.NoError(t, err)
+		assert.False(t, c.R2Configured())
+		assert.Equal(t, "tmp/media", c.MediaDir)
+		assert.Equal(t, "http://localhost:9000/media-files", c.MediaPublicBaseURL)
+	})
+
+	t.Run("production requires R2 and a public base URL", func(t *testing.T) {
+		_, err := Load(envGetter(with(map[string]string{"ENV": "production"})))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "R2_")
+		assert.Contains(t, err.Error(), "MEDIA_PUBLIC_BASE_URL")
+	})
+
+	t.Run("R2 configured; trailing slash trimmed", func(t *testing.T) {
+		c, err := Load(envGetter(with(map[string]string{
+			"ENV":                   "production",
+			"R2_ACCOUNT_ID":         "acct",
+			"R2_ACCESS_KEY_ID":      "id",
+			"R2_SECRET_ACCESS_KEY":  "secret",
+			"R2_BUCKET":             "qdjr-media",
+			"MEDIA_PUBLIC_BASE_URL": "https://pub-abc.r2.dev/",
+		})))
+		require.NoError(t, err)
+		assert.True(t, c.R2Configured())
+		assert.Equal(t, "https://pub-abc.r2.dev", c.MediaPublicBaseURL)
+	})
+
+	t.Run("partial R2 config is an error, not a silent local fallback", func(t *testing.T) {
+		_, err := Load(envGetter(with(map[string]string{"R2_ACCOUNT_ID": "acct"})))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "R2_")
+	})
+}

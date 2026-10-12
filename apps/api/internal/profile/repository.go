@@ -18,8 +18,8 @@ type Repository struct {
 	urlPrefix string
 }
 
-// NewRepository constructs a Repository. Pass the Supabase storage public-URL
-// prefix as urlPrefix so the API returns directly-loadable avatar URLs.
+// NewRepository constructs a Repository. Pass the media public base URL (with
+// a trailing slash) as urlPrefix so the API returns directly-loadable avatar URLs.
 func NewRepository(pool *pgxpool.Pool, urlPrefix string) *Repository {
 	return &Repository{pool: pool, urlPrefix: urlPrefix}
 }

@@ -16,16 +16,16 @@ import (
 // Repository reads published posts from Postgres.
 //
 // urlPrefix is prepended to media.storage_path to produce a public URL,
-// e.g. "https://<project>.supabase.co/storage/v1/object/public/". When empty
+// e.g. "https://media.qdjr.dev/". When empty
 // the raw storage_path is returned (test convenience; FE may prefix itself).
 type Repository struct {
 	pool      *pgxpool.Pool
 	urlPrefix string
 }
 
-// NewRepository constructs a Repository. Pass the Supabase storage public-URL
-// prefix as urlPrefix (e.g. cfg.SupabaseURL + "/storage/v1/object/public/") so
-// the API returns directly-loadable URLs. May be empty in tests.
+// NewRepository constructs a Repository. Pass the media public base URL with a
+// trailing slash (cfg.MediaPublicBaseURL + "/") so the API returns
+// directly-loadable URLs. May be empty in tests.
 func NewRepository(pool *pgxpool.Pool, urlPrefix string) *Repository {
 	return &Repository{pool: pool, urlPrefix: urlPrefix}
 }

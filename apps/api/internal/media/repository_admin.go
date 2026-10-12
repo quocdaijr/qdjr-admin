@@ -18,8 +18,8 @@ type AdminRepository struct {
 	urlPrefix string
 }
 
-// NewAdminRepository constructs an AdminRepository. urlPrefix should be the
-// Supabase public-object base, e.g. "http://.../storage/v1/object/public/".
+// NewAdminRepository constructs an AdminRepository. urlPrefix is the media
+// public base URL with a trailing slash, e.g. "https://media.qdjr.dev/".
 func NewAdminRepository(pool *pgxpool.Pool, urlPrefix string) *AdminRepository {
 	return &AdminRepository{pool: pool, urlPrefix: urlPrefix}
 }

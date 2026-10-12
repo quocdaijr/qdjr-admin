@@ -32,7 +32,7 @@ type Deps struct {
 	SettingsAdmin   *sitesettings.AdminRepository
 	ContactAdmin    *contact.AdminRepository
 	MediaAdmin      *media.AdminRepository
-	MediaStorage    *media.StorageClient
+	MediaStorage    media.Storage
 	UsersAdmin      *users.AdminRepository
 	UsersAccounts   *users.PGAccounts
 }

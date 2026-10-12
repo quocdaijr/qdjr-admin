@@ -1,10 +1,12 @@
-// Package media implements the admin media library: uploads via signed
-// Supabase Storage URLs, listing and deletion.
+// Package media implements the admin media library: uploads through the API
+// into object storage (Cloudflare R2, or a local folder in development),
+// listing and deletion.
 package media
 
 import (
 	"context"
 	"errors"
+	"io"
 	"time"
 
 	"github.com/google/uuid"
@@ -13,22 +15,14 @@ import (
 // ErrNotFound is returned when a media id is not found.
 var ErrNotFound = errors.New("media: not found")
 
-// AllowedMimeTypes lists the upload types accepted. Mirrors the validation in CreateInput.
-var AllowedMimeTypes = []string{
-	"image/png",
-	"image/jpeg",
-	"image/webp",
-	"image/gif",
-	"image/svg+xml",
-}
-
-// MimeExtensions maps allowed mime types to canonical file extensions.
+// MimeExtensions maps the accepted upload types (detected from the file's
+// bytes, never the client's claim) to canonical extensions. SVG is excluded:
+// it can carry script.
 var MimeExtensions = map[string]string{
-	"image/png":     ".png",
-	"image/jpeg":    ".jpg",
-	"image/webp":    ".webp",
-	"image/gif":     ".gif",
-	"image/svg+xml": ".svg",
+	"image/png":  ".png",
+	"image/jpeg": ".jpg",
+	"image/webp": ".webp",
+	"image/gif":  ".gif",
 }
 
 // MaxUploadSize is the maximum allowed upload size in bytes (10 MB).
@@ -83,8 +77,9 @@ type AdminWriter interface {
 	Delete(ctx context.Context, id uuid.UUID) error
 }
 
-// Storage is the contract for object-storage operations the handler depends on.
+// Storage is the object store the handler writes to. Keys look like
+// "media/<uuid>.<ext>"; Delete of a missing key is not an error.
 type Storage interface {
-	SignedUploadURL(ctx context.Context, path string) (string, error)
-	Delete(ctx context.Context, path string) error
+	Put(ctx context.Context, key, contentType string, body io.Reader, size int64) error
+	Delete(ctx context.Context, key string) error
 }

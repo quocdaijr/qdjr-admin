@@ -1,13 +1,20 @@
 package media
 
 import (
+	"bytes"
 	"errors"
+	"image"
+	_ "image/gif"  // register decoders for DecodeConfig
+	_ "image/jpeg" // (dimensions only)
+	_ "image/png"
+	"io"
 	"net/http"
-	"regexp"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	_ "golang.org/x/image/webp" // webp DecodeConfig
 
 	apphttp "github.com/quocdaijr/qdjr-admin/apps/api/internal/http"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/rbac"
@@ -20,13 +27,9 @@ const (
 
 	maxFilenameLen = 255
 	maxAltTextLen  = 500
-	signedURLTTL   = 3600
-)
-
-// storagePathPattern enforces "media/<uuid><ext>" for /POST /media. The uuid
-// is the v4 hex form (with dashes); ext is one of the canonical extensions.
-var storagePathPattern = regexp.MustCompile(
-	`^media/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\.(png|jpg|jpeg|webp|gif|svg)$`,
+	// multipartOverhead leaves room for boundaries and the alt_text field.
+	multipartOverhead = 64 * 1024
+	sniffLen          = 512
 )
 
 // RegisterAdmin mounts the admin media endpoints on group g (already wrapped
@@ -36,40 +39,14 @@ func RegisterAdmin(g *gin.RouterGroup, repo AdminWriter, storage Storage, res rb
 		apphttp.RequirePermission(res, "media:write"),
 		adminListHandler(repo),
 	)
-	g.POST("/media/signed-url",
-		apphttp.RequirePermission(res, "media:write"),
-		adminSignedURLHandler(storage),
-	)
 	g.POST("/media",
 		apphttp.RequirePermission(res, "media:write"),
-		adminCreateHandler(repo),
+		adminUploadHandler(repo, storage),
 	)
 	g.DELETE("/media/:id",
 		apphttp.RequirePermission(res, "media:write"),
 		adminDeleteHandler(repo, storage, res),
 	)
-}
-
-type signedURLPayload struct {
-	Filename string `json:"filename"`
-	MimeType string `json:"mime_type"`
-	Size     int64  `json:"size"`
-}
-
-type signedURLResponse struct {
-	StoragePath string `json:"storage_path"`
-	SignedURL   string `json:"signed_url"`
-	ExpiresIn   int    `json:"expires_in"`
-}
-
-type adminCreatePayload struct {
-	Filename    string  `json:"filename"`
-	StoragePath string  `json:"storage_path"`
-	MimeType    string  `json:"mime_type"`
-	Size        int64   `json:"size"`
-	Width       *int    `json:"width"`
-	Height      *int    `json:"height"`
-	AltText     *string `json:"alt_text"`
 }
 
 func adminListHandler(repo AdminWriter) gin.HandlerFunc {
@@ -90,99 +67,88 @@ func adminListHandler(repo AdminWriter) gin.HandlerFunc {
 	}
 }
 
-func adminSignedURLHandler(storage Storage) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		var p signedURLPayload
-		if err := c.ShouldBindJSON(&p); err != nil {
-			apphttp.Err(c, http.StatusBadRequest, "INVALID", err.Error())
-			return
-		}
-		if l := len(p.Filename); l < 1 || l > maxFilenameLen {
-			apphttp.Err(c, http.StatusBadRequest, "INVALID",
-				"filename must be 1-255 chars")
-			return
-		}
-		if !IsAllowedMime(p.MimeType) {
-			apphttp.Err(c, http.StatusBadRequest, "INVALID",
-				"mime_type must be one of: image/png, image/jpeg, image/webp, image/gif, image/svg+xml")
-			return
-		}
-		if p.Size <= 0 || p.Size > MaxUploadSize {
-			apphttp.Err(c, http.StatusBadRequest, "INVALID",
-				"size must be > 0 and <= 10 MB")
-			return
-		}
-
-		storagePath := "media/" + uuid.New().String() + MimeExtensions[p.MimeType]
-		signed, err := storage.SignedUploadURL(c.Request.Context(), storagePath)
-		if err != nil {
-			apphttp.Err(c, http.StatusBadGateway, "STORAGE", err.Error())
-			return
-		}
-		apphttp.OK(c, signedURLResponse{
-			StoragePath: storagePath,
-			SignedURL:   signed,
-			ExpiresIn:   signedURLTTL,
-		})
-	}
-}
-
-func adminCreateHandler(repo AdminWriter) gin.HandlerFunc {
+// adminUploadHandler accepts multipart/form-data with a "file" part and an
+// optional "alt_text" field. The type is detected from the bytes; only
+// png/jpeg/webp/gif up to MaxUploadSize are stored.
+func adminUploadHandler(repo AdminWriter, storage Storage) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		uid, ok := apphttp.UserIDFromContext(c)
 		if !ok {
 			apphttp.Err(c, http.StatusUnauthorized, "UNAUTHENTICATED", "auth required")
 			return
 		}
-		var p adminCreatePayload
-		if err := c.ShouldBindJSON(&p); err != nil {
-			apphttp.Err(c, http.StatusBadRequest, "INVALID", err.Error())
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, MaxUploadSize+multipartOverhead)
+		fh, err := c.FormFile("file")
+		if err != nil {
+			var tooBig *http.MaxBytesError
+			if errors.As(err, &tooBig) {
+				apphttp.Err(c, http.StatusRequestEntityTooLarge, "TOO_LARGE", "file must be at most 10 MB")
+				return
+			}
+			apphttp.Err(c, http.StatusBadRequest, "INVALID", "multipart field \"file\" is required")
 			return
 		}
-		if l := len(p.Filename); l < 1 || l > maxFilenameLen {
-			apphttp.Err(c, http.StatusBadRequest, "INVALID",
-				"filename must be 1-255 chars")
+		if fh.Size > MaxUploadSize {
+			apphttp.Err(c, http.StatusRequestEntityTooLarge, "TOO_LARGE", "file must be at most 10 MB")
 			return
 		}
-		if !storagePathPattern.MatchString(p.StoragePath) {
-			apphttp.Err(c, http.StatusBadRequest, "INVALID",
-				"storage_path must match media/<uuid>.<ext>")
+		name := strings.TrimSpace(fh.Filename)
+		if l := len(name); l < 1 || l > maxFilenameLen {
+			apphttp.Err(c, http.StatusBadRequest, "INVALID", "filename must be 1-255 chars")
 			return
 		}
-		if !IsAllowedMime(p.MimeType) {
-			apphttp.Err(c, http.StatusBadRequest, "INVALID",
-				"mime_type must be one of: image/png, image/jpeg, image/webp, image/gif, image/svg+xml")
-			return
-		}
-		if p.Size <= 0 {
-			apphttp.Err(c, http.StatusBadRequest, "INVALID", "size must be > 0")
-			return
-		}
-		if p.Width != nil && *p.Width <= 0 {
-			apphttp.Err(c, http.StatusBadRequest, "INVALID", "width must be > 0")
-			return
-		}
-		if p.Height != nil && *p.Height <= 0 {
-			apphttp.Err(c, http.StatusBadRequest, "INVALID", "height must be > 0")
-			return
-		}
-		if p.AltText != nil && len(*p.AltText) > maxAltTextLen {
-			apphttp.Err(c, http.StatusBadRequest, "INVALID",
-				"alt_text must be ≤500 chars")
-			return
+		var altText *string
+		if v := strings.TrimSpace(c.PostForm("alt_text")); v != "" {
+			if len(v) > maxAltTextLen {
+				apphttp.Err(c, http.StatusBadRequest, "INVALID", "alt_text must be ≤500 chars")
+				return
+			}
+			altText = &v
 		}
 
+		f, err := fh.Open()
+		if err != nil {
+			apphttp.Err(c, http.StatusBadRequest, "INVALID", "cannot read upload")
+			return
+		}
+		defer func() { _ = f.Close() }()
+		data, err := io.ReadAll(io.LimitReader(f, MaxUploadSize+1))
+		if err != nil {
+			apphttp.Err(c, http.StatusBadRequest, "INVALID", "cannot read upload")
+			return
+		}
+		if int64(len(data)) > MaxUploadSize {
+			apphttp.Err(c, http.StatusRequestEntityTooLarge, "TOO_LARGE", "file must be at most 10 MB")
+			return
+		}
+		mime := http.DetectContentType(data[:min(len(data), sniffLen)])
+		ext, allowed := MimeExtensions[mime]
+		if len(data) == 0 || !allowed {
+			apphttp.Err(c, http.StatusBadRequest, "INVALID", "file must be a PNG, JPEG, WebP or GIF image")
+			return
+		}
+		var width, height *int
+		if cfg, _, err := image.DecodeConfig(bytes.NewReader(data)); err == nil {
+			width, height = &cfg.Width, &cfg.Height
+		}
+
+		key := "media/" + uuid.New().String() + ext
+		if err := storage.Put(c.Request.Context(), key, mime, bytes.NewReader(data), int64(len(data))); err != nil {
+			apphttp.Err(c, http.StatusBadGateway, "STORAGE", err.Error())
+			return
+		}
 		out, err := repo.Create(c.Request.Context(), CreateInput{
-			Filename:    p.Filename,
-			StoragePath: p.StoragePath,
-			MimeType:    p.MimeType,
-			Size:        p.Size,
-			Width:       p.Width,
-			Height:      p.Height,
-			AltText:     p.AltText,
+			Filename:    name,
+			StoragePath: key,
+			MimeType:    mime,
+			Size:        int64(len(data)),
+			Width:       width,
+			Height:      height,
+			AltText:     altText,
 			UploadedBy:  uid,
 		})
 		if err != nil {
+			_ = storage.Delete(c.Request.Context(), key) // don't orphan the object
 			apphttp.Err(c, http.StatusInternalServerError, "INTERNAL", err.Error())
 			return
 		}

@@ -23,6 +23,9 @@ type RouterDeps struct {
 	RegisterAdmin func(*gin.RouterGroup)
 	// RegisterPublic attaches unauthenticated /v1 handlers (used by Plan 2).
 	RegisterPublic func(*gin.RouterGroup)
+	// LocalMediaDir, when set (development without R2), is served read-only
+	// at /media-files/ without directory listings.
+	LocalMediaDir string
 }
 
 // NewRouter builds the Gin engine.
@@ -44,6 +47,10 @@ func NewRouter(deps RouterDeps) *gin.Engine {
 		}
 		c.JSON(http.StatusOK, gin.H{"status": "ok", "db": "ok"})
 	})
+
+	if deps.LocalMediaDir != "" {
+		r.StaticFS("/media-files", gin.Dir(deps.LocalMediaDir, false))
+	}
 
 	v1 := r.Group("/v1")
 	if deps.RegisterPublic != nil {

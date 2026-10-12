@@ -21,19 +21,33 @@ services:
       # migration fails the health check and Render keeps the previous deploy.
       - key: RUN_MIGRATIONS
         value: "true"
-      - key: SUPABASE_URL
-        value: https://rknqbtaybeqdzwwonlmg.supabase.co
-      - key: SUPABASE_JWKS_URL
-        value: https://rknqbtaybeqdzwwonlmg.supabase.co/auth/v1/.well-known/jwks.json
       # Admin origin: append the workers.dev URL printed by the first Cloudflare
       # deploy (Task 10) and push; Render re-syncs the blueprint.
       - key: CORS_ORIGINS
         value: https://qdjr.dev,https://www.qdjr.dev
-      # Supabase *Session* pooler URL (port 5432, IPv4): the direct host is
-      # IPv6-only and transaction pooling breaks pgx prepared statements.
+      # Neon: pooled URL (host contains "-pooler") for the app, direct URL for
+      # goose (schema changes are safest on a direct, non-pooled connection).
       - key: DATABASE_URL
         sync: false
-      - key: SUPABASE_JWT_SECRET
+      - key: MIGRATIONS_DATABASE_URL
         sync: false
-      - key: SUPABASE_SERVICE_ROLE_KEY
+      - key: JWT_SECRET
+        generateValue: true
+      # First super_admin; created on first start, ignored once it exists.
+      - key: BOOTSTRAP_ADMIN_EMAIL
+        sync: false
+      - key: BOOTSTRAP_ADMIN_PASSWORD
+        sync: false
+      # Cloudflare R2 (S3 API) for media.
+      - key: R2_ACCOUNT_ID
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_BUCKET
+        value: qdjr-media
+      # The bucket's public r2.dev URL for now; switch to a custom domain later
+      # (URLs are built at read time, so no data migration is needed).
+      - key: MEDIA_PUBLIC_BASE_URL
         sync: false

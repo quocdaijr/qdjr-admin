@@ -63,7 +63,9 @@ func run() error {
 	defer cancel()
 
 	if cfg.RunMigrations {
-		if err := migrate.Up(ctx, cfg.MigrationsDatabaseURL); err != nil {
+		if err := db.Retry(ctx, 5, time.Second, func(ctx context.Context) error {
+			return migrate.Up(ctx, cfg.MigrationsDatabaseURL)
+		}); err != nil {
 			return fmt.Errorf("migrate: %w", err)
 		}
 		log.Info("migrations applied")
@@ -79,9 +81,9 @@ func run() error {
 
 	resolver := rbac.NewStatic(rbac.NewPGStore(pool))
 
-	// Public posts API: prefix media storage paths with the Supabase public
-	// storage URL so the FE can render thumbnails directly.
-	storagePrefix := cfg.SupabaseURL + "/storage/v1/object/public/"
+	// Media keys ("media/<uuid>.png") become public URLs under
+	// MEDIA_PUBLIC_BASE_URL (R2 r2.dev / custom domain, or the local folder).
+	storagePrefix := cfg.MediaPublicBaseURL + "/"
 	postsRepo := posts.NewRepository(pool, storagePrefix)
 	postsAdminRepo := posts.NewAdminRepository(pool)
 	categoriesRepo := categories.NewRepository(pool)
@@ -96,7 +98,16 @@ func run() error {
 	contactAdminRepo := contact.NewAdminRepository(pool)
 	contactLimiter := contact.NewLimiter()
 	mediaAdminRepo := media.NewAdminRepository(pool, storagePrefix)
-	mediaStorage := media.NewStorageClient(cfg.SupabaseURL, cfg.SupabaseServiceRoleKey, "media")
+	var mediaStorage media.Storage
+	localMediaDir := ""
+	if cfg.R2Configured() {
+		mediaStorage = media.NewR2(cfg.R2AccountID, cfg.R2AccessKeyID, cfg.R2SecretAccessKey, cfg.R2Bucket)
+		log.Info("media storage: r2", "bucket", cfg.R2Bucket)
+	} else {
+		mediaStorage = media.NewLocalStorage(cfg.MediaDir)
+		localMediaDir = cfg.MediaDir
+		log.Info("media storage: local folder (development only)", "dir", cfg.MediaDir)
+	}
 	usersRepo := users.NewAdminRepository(pool)
 	accounts := users.NewPGAccounts(pool)
 	loginLimiter := contact.NewLimiterWith(rate.Every(6*time.Second), 10) // ~10/min per IP
@@ -104,9 +115,6 @@ func run() error {
 		return fmt.Errorf("seed admin: %w", err)
 	} else if created {
 		log.Info("bootstrap admin created", "email", cfg.BootstrapAdminEmail)
-	}
-	if err := mediaStorage.EnsureBucket(ctx); err != nil {
-		log.Warn("media bucket ensure failed (continuing)", "err", err)
 	}
 	// Background eviction lives with the process; pass context.Background()
 	// because RegisterPublic doesn't get the run-loop context.
@@ -118,9 +126,10 @@ func run() error {
 	}
 
 	r := apphttp.NewRouter(apphttp.RouterDeps{
-		Pool:        pool,
-		CORSOrigins: cfg.CORSOrigins,
-		Verifier:    issuer,
+		Pool:          pool,
+		CORSOrigins:   cfg.CORSOrigins,
+		LocalMediaDir: localMediaDir,
+		Verifier:      issuer,
 		RegisterAdmin: func(g *gin.RouterGroup) {
 			adminapi.Register(g, adminapi.Deps{
 				Resolver:        resolver,

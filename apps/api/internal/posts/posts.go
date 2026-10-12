@@ -14,7 +14,7 @@ var ErrNotFound = errors.New("posts: not found")
 
 // Thumbnail is the public-facing media reference attached to a post.
 // URL is a fully-qualified, browser-loadable URL when the repository is
-// configured with a Supabase URL prefix; otherwise it is the raw storage path.
+// configured with the media public base URL; otherwise it is the raw storage path.
 type Thumbnail struct {
 	URL string `json:"url"`
 	Alt string `json:"alt"`
