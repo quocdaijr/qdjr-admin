@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 
@@ -33,13 +33,14 @@ interface ChangeRoleDialogProps {
 
 export function ChangeRoleDialog({ user, onOpenChange }: ChangeRoleDialogProps) {
   const queryClient = useQueryClient();
-  const [role, setRole] = useState<Role>('author');
-
-  useEffect(() => {
-    if (user) {
-      setRole((user.role as Role | null) ?? 'author');
-    }
-  }, [user]);
+  const [role, setRole] = useState<Role>((user?.role as Role | null) ?? 'author');
+  // Reset the picker when a different user is opened (React's "adjust state
+  // on prop change" pattern; avoids a setState-in-effect render cascade).
+  const [prevUser, setPrevUser] = useState(user);
+  if (user !== prevUser) {
+    setPrevUser(user);
+    if (user) setRole((user.role as Role | null) ?? 'author');
+  }
 
   const updateMutation = useMutation({
     mutationFn: async () =>

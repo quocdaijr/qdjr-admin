@@ -132,7 +132,7 @@ export function UsersTable() {
               ))
             ) : isError ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-center text-red-600">
+                <TableCell colSpan={5} className="text-center text-destructive">
                   {error instanceof Error
                     ? error.message
                     : 'Failed to load users'}

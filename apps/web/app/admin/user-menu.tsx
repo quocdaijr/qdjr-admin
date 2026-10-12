@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { LogOut } from 'lucide-react';
+import { useTheme } from 'next-themes';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
@@ -13,6 +14,8 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
@@ -28,6 +31,7 @@ export function UserMenu({ user }: UserMenuProps) {
   const router = useRouter();
   const meQuery = useMe();
   const [signingOut, setSigningOut] = useState(false);
+  const { theme = 'system', setTheme } = useTheme();
 
   const handleSignOut = async () => {
     setSigningOut(true);
@@ -49,7 +53,9 @@ export function UserMenu({ user }: UserMenuProps) {
       {meQuery.isLoading ? (
         <Skeleton className="h-5 w-16" />
       ) : me?.role ? (
-        <Badge variant="secondary">{me.role}</Badge>
+        <Badge variant="outline" className="hidden font-mono text-[11px] uppercase tracking-[0.06em] sm:inline-flex">
+          {me.role}
+        </Badge>
       ) : null}
       <DropdownMenu>
         <DropdownMenuTrigger
@@ -66,6 +72,15 @@ export function UserMenu({ user }: UserMenuProps) {
               ) : null}
             </div>
           </DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <DropdownMenuLabel className="font-mono text-[11px] uppercase tracking-[0.06em] text-muted-foreground">
+            Theme
+          </DropdownMenuLabel>
+          <DropdownMenuRadioGroup value={theme} onValueChange={(value) => setTheme(String(value))}>
+            <DropdownMenuRadioItem value="system">System</DropdownMenuRadioItem>
+            <DropdownMenuRadioItem value="light">Light</DropdownMenuRadioItem>
+            <DropdownMenuRadioItem value="dark">Dark</DropdownMenuRadioItem>
+          </DropdownMenuRadioGroup>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={handleSignOut} disabled={signingOut}>
             <LogOut className="size-4" aria-hidden="true" />

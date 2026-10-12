@@ -103,7 +103,7 @@ export function ProfileForm() {
 
   if (profileQuery.isError) {
     return (
-      <p className="text-sm text-red-600">
+      <p className="text-sm text-destructive">
         {profileQuery.error instanceof Error
           ? profileQuery.error.message
           : 'Failed to load profile'}
@@ -180,7 +180,7 @@ export function ProfileForm() {
           {...register('content')}
           rows={24}
           spellCheck={false}
-          className="font-mono text-xs"
+          className="rounded-[10px] border-0 bg-graphite font-mono text-xs leading-5 text-graphite-foreground"
         />
         <p className="text-xs text-muted-foreground">
           Copy for qdjr.dev / and /about, one object per language: {'{ "vi": {…}, "en": {…} }'}.

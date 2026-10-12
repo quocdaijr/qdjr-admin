@@ -87,7 +87,7 @@ export function SettingsForm() {
 
   if (settingsQuery.isError) {
     return (
-      <p className="text-sm text-red-600">
+      <p className="text-sm text-destructive">
         {settingsQuery.error instanceof Error
           ? settingsQuery.error.message
           : 'Failed to load settings'}

@@ -2,76 +2,54 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import {
-  Newspaper,
-  Folder,
-  Tags,
-  Image as ImageIcon,
-  User as UserIcon,
-  Settings,
-  Inbox,
-  Users,
-  Menu,
-} from 'lucide-react';
-import type { ComponentType, SVGProps } from 'react';
+import { Menu } from 'lucide-react';
 import { useState } from 'react';
 
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 
-interface NavItem {
-  href: string;
-  label: string;
-  icon: ComponentType<SVGProps<SVGSVGElement>>;
-}
+import { NAV_GROUPS, isActive } from './nav';
 
-const NAV: NavItem[] = [
-  { href: '/admin/posts', label: 'Posts', icon: Newspaper },
-  { href: '/admin/categories', label: 'Categories', icon: Folder },
-  { href: '/admin/tags', label: 'Tags', icon: Tags },
-  { href: '/admin/media', label: 'Media', icon: ImageIcon },
-  { href: '/admin/profile', label: 'Profile', icon: UserIcon },
-  { href: '/admin/settings', label: 'Settings', icon: Settings },
-  { href: '/admin/inbox', label: 'Inbox', icon: Inbox },
-  { href: '/admin/users', label: 'Users', icon: Users },
-];
-
-interface NavListProps {
-  pathname: string;
-  onNavigate?: () => void;
-}
-
-function NavList({ pathname, onNavigate }: NavListProps) {
+function Wordmark() {
   return (
-    <nav className="flex flex-col gap-1 p-2">
-      {NAV.map((item) => {
-        const isActive =
-          pathname === item.href || pathname.startsWith(item.href + '/');
-        const Icon = item.icon;
-        return (
-          <Link
-            key={item.href}
-            href={item.href}
-            onClick={onNavigate}
-            className={cn(
-              'flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors',
-              isActive
-                ? 'bg-muted text-foreground'
-                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-            )}
-          >
-            <Icon className="size-4" aria-hidden="true" />
-            <span>{item.label}</span>
-          </Link>
-        );
-      })}
+    <Link href="/admin" className="font-heading text-[15px] font-semibold tracking-[-0.02em]">
+      qdjr<span className="text-muted-foreground">/admin</span>
+    </Link>
+  );
+}
+
+function NavList({ pathname, onNavigate }: { pathname: string; onNavigate?: () => void }) {
+  return (
+    <nav aria-label="Admin" className="flex flex-col gap-6 px-3 py-4">
+      {NAV_GROUPS.map((group) => (
+        <div key={group.label} className="flex flex-col gap-0.5">
+          <p className="px-3 pb-1 font-mono text-[11px] uppercase tracking-[0.06em] text-muted-foreground">
+            {group.label}
+          </p>
+          {group.items.map((item) => {
+            const active = isActive(pathname, item.href);
+            const Icon = item.icon;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={onNavigate}
+                aria-current={active ? 'page' : undefined}
+                className={cn(
+                  'relative flex h-8 items-center gap-2.5 whitespace-nowrap rounded-md px-3 text-sm transition-colors',
+                  active
+                    ? 'font-medium text-foreground before:absolute before:inset-y-1.5 before:left-0 before:w-0.5 before:rounded-full before:bg-primary'
+                    : 'text-muted-foreground hover:bg-background hover:text-foreground'
+                )}
+              >
+                <Icon className="size-4 shrink-0" aria-hidden="true" />
+                {item.label}
+              </Link>
+            );
+          })}
+        </div>
+      ))}
     </nav>
   );
 }
@@ -82,30 +60,26 @@ export function Sidebar() {
 
   return (
     <>
-      {/* Desktop sidebar */}
-      <aside className="hidden md:flex md:w-60 md:flex-col md:border-r md:bg-card">
-        <div className="flex h-14 items-center px-4 font-semibold">qdjr admin</div>
+      <aside className="hidden md:sticky md:top-0 md:flex md:h-screen md:w-60 md:shrink-0 md:flex-col md:border-r md:bg-sidebar">
+        <div className="flex h-14 items-center border-b px-6">
+          <Wordmark />
+        </div>
         <NavList pathname={pathname} />
       </aside>
 
-      {/* Mobile sheet trigger */}
-      <div className="flex h-14 items-center gap-2 border-b bg-card px-3 md:hidden">
+      <div className="flex h-14 items-center gap-2 border-b bg-sidebar px-3 md:hidden">
         <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-          <SheetTrigger
-            render={
-              <Button variant="ghost" size="icon-sm" aria-label="Open navigation" />
-            }
-          >
+          <SheetTrigger render={<Button variant="ghost" size="icon-sm" aria-label="Open navigation" />}>
             <Menu className="size-4" />
           </SheetTrigger>
-          <SheetContent side="left" className="p-0">
-            <SheetHeader>
-              <SheetTitle>qdjr admin</SheetTitle>
+          <SheetContent side="left" className="w-64 bg-sidebar p-0">
+            <SheetHeader className="h-14 justify-center border-b px-6">
+              <SheetTitle className="font-heading">qdjr/admin</SheetTitle>
             </SheetHeader>
             <NavList pathname={pathname} onNavigate={() => setMobileOpen(false)} />
           </SheetContent>
         </Sheet>
-        <span className="font-semibold">qdjr admin</span>
+        <Wordmark />
       </div>
     </>
   );

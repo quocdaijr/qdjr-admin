@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { StatusChip } from '@/components/status-chip';
 import {
   Table,
   TableBody,
@@ -47,13 +48,12 @@ type StatusFilter = 'all' | 'draft' | 'published' | 'archived';
 
 const PER_PAGE = 20;
 
-function statusBadgeVariant(
-  status: Post['status']
-): 'default' | 'secondary' | 'outline' {
-  if (status === 'published') return 'default';
-  if (status === 'archived') return 'outline';
-  return 'secondary';
-}
+const STATUS_LABELS: Record<StatusFilter, string> = {
+  all: 'All statuses',
+  draft: 'Draft',
+  published: 'Published',
+  archived: 'Archived',
+};
 
 function formatDate(value: string | null): string {
   if (!value) return '—';
@@ -121,12 +121,12 @@ export function PostsTable() {
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
-        <form onSubmit={onSearchSubmit} className="flex items-center gap-2">
+        <form onSubmit={onSearchSubmit} className="flex w-full min-w-0 items-center gap-2 sm:w-auto">
           <Input
             placeholder="Search title or slug…"
             value={qInput}
             onChange={(e) => setQInput(e.target.value)}
-            className="w-64"
+            className="min-w-0 flex-1 sm:w-64 sm:flex-none"
           />
           <Button type="submit" variant="outline" size="sm">
             Search
@@ -134,7 +134,9 @@ export function PostsTable() {
         </form>
         <Select value={status} onValueChange={onStatusChange}>
           <SelectTrigger className="w-40">
-            <SelectValue placeholder="Status" />
+            <SelectValue placeholder="Status">
+              {(value: string) => STATUS_LABELS[value as StatusFilter] ?? 'All statuses'}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All statuses</SelectItem>
@@ -145,7 +147,7 @@ export function PostsTable() {
         </Select>
       </div>
 
-      <div className="rounded-lg border">
+      <div className="overflow-x-auto rounded-[10px] border bg-card">
         <Table>
           <TableHeader>
             <TableRow>
@@ -181,7 +183,7 @@ export function PostsTable() {
               ))
             ) : isError ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center text-red-600">
+                <TableCell colSpan={6} className="text-center text-destructive">
                   {error instanceof Error ? error.message : 'Failed to load posts'}
                 </TableCell>
               </TableRow>
@@ -205,13 +207,11 @@ export function PostsTable() {
                       {post.title}
                     </Link>
                   </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {post.slug}
+                  <TableCell className="font-mono text-xs text-muted-foreground">
+                    /{post.slug}
                   </TableCell>
                   <TableCell>
-                    <Badge variant={statusBadgeVariant(post.status)}>
-                      {post.status ?? 'draft'}
-                    </Badge>
+                    <StatusChip status={post.status} />
                   </TableCell>
                   <TableCell>
                     {post.category ? (
@@ -220,7 +220,7 @@ export function PostsTable() {
                       <span className="text-muted-foreground">—</span>
                     )}
                   </TableCell>
-                  <TableCell className="text-muted-foreground">
+                  <TableCell className="font-mono text-xs text-muted-foreground">
                     {formatDate(post.published_at)}
                   </TableCell>
                   <TableCell>

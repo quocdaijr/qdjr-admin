@@ -73,7 +73,7 @@ export function LoginForm() {
               aria-invalid={!!errors.email}
             />
             {errors.email ? (
-              <p className="text-sm text-red-600">{errors.email.message}</p>
+              <p className="text-sm text-destructive">{errors.email.message}</p>
             ) : null}
           </div>
           <div className="flex flex-col gap-2">
@@ -86,7 +86,7 @@ export function LoginForm() {
               aria-invalid={!!errors.password}
             />
             {errors.password ? (
-              <p className="text-sm text-red-600">{errors.password.message}</p>
+              <p className="text-sm text-destructive">{errors.password.message}</p>
             ) : null}
           </div>
         </CardContent>
