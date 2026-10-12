@@ -60,7 +60,7 @@ jobs:
       - name: Lint
         uses: golangci/golangci-lint-action@v9
         with:
-          # v2 line: v1.x is built with Go 1.24 and refuses a Go 1.26 module.
+          # v2 line: v1.x is built with Go 1.24 and refuses a Go 1.27 module.
           version: v2.14.0
           working-directory: apps/api
 
