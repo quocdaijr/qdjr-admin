@@ -13,6 +13,11 @@ import (
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/auth"
 )
 
+// readyzTimeout bounds the DB ping in /readyz. Neon suspends idle compute and
+// takes up to a few seconds to wake on the first connection; a 1 s limit made
+// a healthy-but-asleep database report DB_UNREACHABLE.
+const readyzTimeout = 5 * time.Second
+
 // RouterDeps wires runtime dependencies into the HTTP layer.
 type RouterDeps struct {
 	Pool        *pgxpool.Pool
@@ -39,7 +44,7 @@ func NewRouter(deps RouterDeps) *gin.Engine {
 			c.JSON(http.StatusOK, gin.H{"status": "ok", "db": "skipped"})
 			return
 		}
-		ctx, cancel := context.WithTimeout(c.Request.Context(), 1*time.Second)
+		ctx, cancel := context.WithTimeout(c.Request.Context(), readyzTimeout)
 		defer cancel()
 		if err := deps.Pool.Ping(ctx); err != nil {
 			Err(c, http.StatusServiceUnavailable, "DB_UNREACHABLE", err.Error())

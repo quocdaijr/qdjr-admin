@@ -23,10 +23,10 @@ services:
       # migration fails the health check and Render keeps the previous deploy.
       - key: RUN_MIGRATIONS
         value: "true"
-      # Admin origin: append the workers.dev URL printed by the first Cloudflare
-      # deploy (Task 10) and push; Render re-syncs the blueprint.
+      # Public site + admin (Cloudflare Workers). Add admin.qdjr.dev here if the
+      # admin later moves to a custom domain.
       - key: CORS_ORIGINS
-        value: https://qdjr.dev,https://www.qdjr.dev
+        value: https://qdjr.dev,https://www.qdjr.dev,https://qdjr-admin.quocdaijr.workers.dev
       # Neon: pooled URL (host contains "-pooler") for the app, direct URL for
       # goose (schema changes are safest on a direct, non-pooled connection).
       - key: DATABASE_URL
