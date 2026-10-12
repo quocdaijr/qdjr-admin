@@ -5,11 +5,17 @@ on:
     branches: [main]
     paths:
       - 'apps/api/**'
+      - 'proto/**'
+      - 'buf.yaml'
+      - 'buf.gen.yaml'
       - '.github/workflows/api.yml'
   pull_request:
     branches: [main]
     paths:
       - 'apps/api/**'
+      - 'proto/**'
+      - 'buf.yaml'
+      - 'buf.gen.yaml'
       - '.github/workflows/api.yml'
 
 permissions:
@@ -50,6 +56,13 @@ jobs:
           go-version: '1.27'
           cache: true
           cache-dependency-path: apps/api/go.sum
+
+      - name: Proto codegen is committed and current
+        working-directory: .
+        run: |
+          npx -y @bufbuild/buf@1.73.0 lint
+          npx -y @bufbuild/buf@1.73.0 generate
+          git diff --exit-code -- apps/api/internal/gen apps/web/gen
 
       - name: Migrate (goose, embedded)
         run: go run ./cmd/migrate up
