@@ -33,9 +33,9 @@ func newFixture(t *testing.T) *fixture {
 	t.Cleanup(pool.Close)
 
 	var (
-		title                                  string
-		description, footer, contactEmail      *string
-		socialLinks                            []byte
+		title                             string
+		description, footer, contactEmail *string
+		socialLinks                       []byte
 	)
 	err = pool.QueryRow(ctx,
 		`select site_title, site_description, footer_text, contact_email, social_links

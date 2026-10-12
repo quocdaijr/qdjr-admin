@@ -1,3 +1,4 @@
+// Package config loads the API configuration from environment variables.
 package config
 
 import (

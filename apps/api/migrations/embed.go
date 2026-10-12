@@ -5,5 +5,7 @@ package migrations
 
 import "embed"
 
+// FS holds every migration file, applied in numeric order by internal/migrate.
+//
 //go:embed *.sql
 var FS embed.FS

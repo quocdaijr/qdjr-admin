@@ -35,7 +35,7 @@ func newStubRepo() *stubRepo {
 	return &stubRepo{rows: map[uuid.UUID]Media{}}
 }
 
-func (s *stubRepo) List(_ context.Context, f AdminListFilter) ([]Media, int, error) {
+func (s *stubRepo) List(_ context.Context, _ AdminListFilter) ([]Media, int, error) {
 	out := make([]Media, 0, len(s.rows))
 	for _, m := range s.rows {
 		out = append(out, m)
@@ -88,11 +88,11 @@ func (s *stubRepo) Delete(_ context.Context, id uuid.UUID) error {
 
 // stubStorage is an in-memory Storage stub for handler tests.
 type stubStorage struct {
-	signedURL    string
-	signedErr    error
-	signedPath   string
-	deleted      []string
-	deleteErr    error
+	signedURL  string
+	signedErr  error
+	signedPath string
+	deleted    []string
+	deleteErr  error
 }
 
 func (s *stubStorage) SignedUploadURL(_ context.Context, path string) (string, error) {

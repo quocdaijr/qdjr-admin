@@ -13,7 +13,7 @@ import (
 const (
 	limiterRate     = rate.Limit(float64(5) / float64(time.Hour/time.Second)) // 5/hr in 1/sec terms
 	limiterBurst    = 5
-	limiterIdleTTL  = time.Hour       // entry untouched this long → evictable
+	limiterIdleTTL  = time.Hour        // entry untouched this long → evictable
 	limiterEvictGap = 10 * time.Minute // sweep interval
 )
 

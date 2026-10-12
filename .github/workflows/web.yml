@@ -15,17 +15,17 @@ on:
 permissions:
   contents: read
 
-env:
-  # Public build-time values (inlined into the bundle). Set as repository
-  # variables: Settings → Secrets and variables → Actions → Variables.
-  NEXT_PUBLIC_API_URL: ${{ vars.NEXT_PUBLIC_API_URL }}
-  NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
-  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
-
 jobs:
   checks:
     name: typecheck + lint + build
     runs-on: ubuntu-latest
+    env:
+      # The build prerenders pages that import the Supabase client, so these must
+      # be non-empty. PR checks fall back to local-dev placeholders when the repo
+      # variables are not set; nothing built here is deployed.
+      NEXT_PUBLIC_API_URL: ${{ vars.NEXT_PUBLIC_API_URL || 'http://localhost:8080' }}
+      NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL || 'http://127.0.0.1:54321' }}
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_placeholder' }}
     defaults:
       run:
         working-directory: apps/web
@@ -49,10 +49,22 @@ jobs:
     needs: checks
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    env:
+      # Public build-time values (inlined into the bundle). Set as repository
+      # variables: Settings → Secrets and variables → Actions → Variables.
+      NEXT_PUBLIC_API_URL: ${{ vars.NEXT_PUBLIC_API_URL }}
+      NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ vars.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
     defaults:
       run:
         working-directory: apps/web
     steps:
+      - name: Require production build variables
+        run: |
+          for v in NEXT_PUBLIC_API_URL NEXT_PUBLIC_SUPABASE_URL NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY; do
+            if [ -z "${!v}" ]; then echo "::error::repository variable $v is not set"; exit 1; fi
+          done
+        working-directory: .
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
         with:

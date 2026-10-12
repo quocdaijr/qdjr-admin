@@ -1,3 +1,4 @@
+// Package adminapi wires every /v1/admin route group and serves /v1/admin/me.
 package adminapi
 
 import (

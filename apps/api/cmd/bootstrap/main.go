@@ -81,7 +81,7 @@ func ensureAuthUser(ctx context.Context, cfg config.Config, email, password stri
 		return uuid.Nil, err
 	}
 	body, _ := io.ReadAll(res.Body)
-	res.Body.Close()
+	_ = res.Body.Close()
 	if res.StatusCode == http.StatusOK {
 		var listed struct {
 			Users []struct {
@@ -116,7 +116,7 @@ func ensureAuthUser(ctx context.Context, cfg config.Config, email, password stri
 		return uuid.Nil, err
 	}
 	cbody, _ := io.ReadAll(cres.Body)
-	cres.Body.Close()
+	_ = cres.Body.Close()
 	if cres.StatusCode >= 300 {
 		return uuid.Nil, fmt.Errorf("create user: %d %s", cres.StatusCode, string(cbody))
 	}

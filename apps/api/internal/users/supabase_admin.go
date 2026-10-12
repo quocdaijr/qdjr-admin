@@ -62,7 +62,7 @@ func (c *SupabaseAdminClient) DeleteUser(ctx context.Context, id uuid.UUID) erro
 	if err != nil {
 		return fmt.Errorf("users supabase: delete request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body, _ := io.ReadAll(resp.Body)
 
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
@@ -88,7 +88,7 @@ func (c *SupabaseAdminClient) findByEmail(ctx context.Context, email string) (uu
 	if err != nil {
 		return uuid.Nil, false, fmt.Errorf("users supabase: find request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body, _ := io.ReadAll(resp.Body)
 
 	if resp.StatusCode != http.StatusOK {
@@ -138,7 +138,7 @@ func (c *SupabaseAdminClient) createUser(ctx context.Context, email, password st
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("users supabase: create request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body, _ := io.ReadAll(resp.Body)
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {

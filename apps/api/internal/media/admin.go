@@ -1,3 +1,5 @@
+// Package media implements the admin media library: uploads via signed
+// Supabase Storage URLs, listing and deletion.
 package media
 
 import (
@@ -11,7 +13,7 @@ import (
 // ErrNotFound is returned when a media id is not found.
 var ErrNotFound = errors.New("media: not found")
 
-// Allowed mime types for uploads. Mirrors the validation in CreateInput.
+// AllowedMimeTypes lists the upload types accepted. Mirrors the validation in CreateInput.
 var AllowedMimeTypes = []string{
 	"image/png",
 	"image/jpeg",

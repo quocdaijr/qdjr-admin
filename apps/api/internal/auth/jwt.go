@@ -1,3 +1,4 @@
+// Package auth verifies Supabase-issued JWTs (HS256 secret or JWKS).
 package auth
 
 import (

@@ -14,8 +14,8 @@ import (
 // computed from storage_path using the public storage prefix supplied at
 // construction.
 type AdminRepository struct {
-	pool       *pgxpool.Pool
-	urlPrefix  string
+	pool      *pgxpool.Pool
+	urlPrefix string
 }
 
 // NewAdminRepository constructs an AdminRepository. urlPrefix should be the

@@ -56,7 +56,7 @@ func (s *StorageClient) EnsureBucket(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("media storage: bucket request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	respBody, _ := io.ReadAll(resp.Body)
 
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
@@ -85,7 +85,7 @@ func (s *StorageClient) SignedUploadURL(ctx context.Context, path string) (strin
 	if err != nil {
 		return "", fmt.Errorf("media storage: sign request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	respBody, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return "", fmt.Errorf("media storage: sign url: status=%d body=%s",
@@ -122,7 +122,7 @@ func (s *StorageClient) Delete(ctx context.Context, path string) error {
 	if err != nil {
 		return fmt.Errorf("media storage: delete request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	respBody, _ := io.ReadAll(resp.Body)
 
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {

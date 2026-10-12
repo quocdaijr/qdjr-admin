@@ -1,4 +1,4 @@
-// apps/api/internal/http/router.go
+// Package http holds the Gin router, middleware and response helpers.
 package http
 
 import (
