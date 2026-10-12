@@ -32,7 +32,7 @@ const ROLES = ['super_admin', 'editor', 'author'] as const;
 const schema = z.object({
   email: z.string().email('Invalid email'),
   role: z.enum(ROLES),
-  password: z.string().min(8, 'At least 8 characters').optional().or(z.literal('')),
+  password: z.string().min(10, 'At least 10 characters').max(72, 'At most 72 characters'),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -67,8 +67,7 @@ export function InviteDialog({ open, onOpenChange }: InviteDialogProps) {
       apiPost<User>('/v1/admin/users', {
         email: values.email,
         role: values.role,
-        password:
-          values.password && values.password !== '' ? values.password : undefined,
+        password: values.password,
       }),
     onSuccess: () => {
       toast.success('User invited');
@@ -137,19 +136,19 @@ export function InviteDialog({ open, onOpenChange }: InviteDialogProps) {
             ) : null}
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label>Password (optional)</Label>
+            <Label htmlFor="invite-password">Initial password</Label>
             <Input
+              id="invite-password"
               {...register('password')}
               type="password"
-              placeholder="Leave blank to send invite email"
+              autoComplete="new-password"
+              placeholder="At least 10 characters"
             />
             {errors.password ? (
-              <p className="text-xs text-destructive">
-                {errors.password.message}
-              </p>
+              <p className="text-xs text-destructive">{errors.password.message}</p>
             ) : (
               <p className="text-xs text-muted-foreground">
-                Required only when creating a new user without an invite flow.
+                Share it with them privately; they can change it from the user menu.
               </p>
             )}
           </div>

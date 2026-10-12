@@ -1,4 +1,4 @@
-import { getAccessToken } from './auth';
+import { getAccessToken, refreshSession, signOut } from './auth';
 
 const BASE = process.env.NEXT_PUBLIC_API_URL!;
 
@@ -19,15 +19,27 @@ export interface Envelope<T> {
   error: { code: string; message: string } | null;
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<Envelope<T>> {
-  const token = await getAccessToken();
+async function send(path: string, init: RequestInit | undefined, token: string | null): Promise<Response> {
   const headers = new Headers(init?.headers);
-  if (!headers.has('Content-Type')) {
+  // FormData sets its own multipart boundary; everything else is JSON.
+  if (!headers.has('Content-Type') && !(init?.body instanceof FormData)) {
     headers.set('Content-Type', 'application/json');
   }
   if (token) headers.set('Authorization', `Bearer ${token}`);
+  return fetch(`${BASE}${path}`, { ...init, headers, cache: 'no-store' });
+}
 
-  const res = await fetch(`${BASE}${path}`, { ...init, headers, cache: 'no-store' });
+async function request<T>(path: string, init?: RequestInit): Promise<Envelope<T>> {
+  let res = await send(path, init, await getAccessToken());
+  if (res.status === 401) {
+    // The access token may have been revoked or expired mid-flight: refresh once.
+    const fresh = await refreshSession();
+    if (!fresh) {
+      await signOut();
+    } else {
+      res = await send(path, init, fresh);
+    }
+  }
   if (res.status === 204) {
     return { data: null, error: null } as Envelope<T>;
   }
@@ -67,6 +79,11 @@ export async function apiPatch<T>(path: string, body: unknown): Promise<T> {
     method: 'PATCH',
     body: JSON.stringify(body),
   });
+  return env.data as T;
+}
+
+export async function apiUpload<T>(path: string, form: FormData): Promise<T> {
+  const env = await request<T>(path, { method: 'POST', body: form });
   return env.data as T;
 }
 

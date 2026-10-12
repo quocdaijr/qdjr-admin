@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { LogOut } from 'lucide-react';
+import { KeyRound, LogOut } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { toast } from 'sonner';
 
@@ -22,6 +22,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 
 import { signOut, type AuthUser } from '@/lib/auth';
+
+import { ChangePasswordDialog } from './change-password-dialog';
 import { useMe } from '@/lib/me';
 
 interface UserMenuProps {
@@ -32,6 +34,7 @@ export function UserMenu({ user }: UserMenuProps) {
   const router = useRouter();
   const meQuery = useMe();
   const [signingOut, setSigningOut] = useState(false);
+  const [passwordOpen, setPasswordOpen] = useState(false);
   const { theme = 'system', setTheme } = useTheme();
 
   const handleSignOut = async () => {
@@ -88,12 +91,17 @@ export function UserMenu({ user }: UserMenuProps) {
             </DropdownMenuRadioGroup>
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={() => setPasswordOpen(true)}>
+            <KeyRound className="size-4" aria-hidden="true" />
+            <span>Change password</span>
+          </DropdownMenuItem>
           <DropdownMenuItem onClick={handleSignOut} disabled={signingOut}>
             <LogOut className="size-4" aria-hidden="true" />
             <span>{signingOut ? 'Signing out…' : 'Sign out'}</span>
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+      <ChangePasswordDialog open={passwordOpen} onOpenChange={setPasswordOpen} />
     </div>
   );
 }
