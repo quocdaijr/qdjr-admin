@@ -1,8 +1,5 @@
-# wrangler / OpenNext need esbuild's and workerd's native binaries.
-# onlyBuiltDependencies: pnpm 10 (CI). allowBuilds: pnpm 11+.
-onlyBuiltDependencies:
-  - esbuild
-  - workerd
+# wrangler / OpenNext need esbuild's and workerd's native binaries; everything
+# else stays blocked from running install scripts.
 allowBuilds:
   esbuild: true
   workerd: true
