@@ -52,5 +52,4 @@ cd apps/web && cp .env.example .env.local && pnpm dev                          #
 - `git push origin main` triggers: `api.yml` (test + lint; Render redeploys on its own from `render.yaml` and applies migrations at startup), `web.yml` (checks, then `wrangler deploy` to Cloudflare), `keepalive.yml` (10-min healthz ping so the free Render instance never sleeps). The public site (`quocdaijr/qdjr`) deploys separately on Netlify.
 - Logs: Render dashboard → qdjr-admin-api → Logs; Cloudflare → Workers & Pages → qdjr-admin → Logs
 - Manual admin deploy: `cd apps/web && pnpm run deploy` (needs `wrangler login`).
-- Backups: `backup.yml` runs `infra/backup/backup-db.sh` nightly (pg_dump → private R2 bucket `qdjr-backups`, keep 30). Restore runbook: `docs/runbooks/database-backup-restore.md`.
 - See `infra/dns/README.md` for DNS and `docs/superpowers/setup/2026-10-12-deployment-checklist.md` for one-time platform setup.
