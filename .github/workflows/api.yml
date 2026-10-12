@@ -19,6 +19,25 @@ jobs:
   test:
     name: test + lint
     runs-on: ubuntu-latest
+    # Same major version as Neon/local so migrations and DB-backed tests run
+    # for real instead of skipping.
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: qdjr
+          POSTGRES_PASSWORD: qdjr
+          POSTGRES_DB: qdjr
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U qdjr -d qdjr"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 30
+    env:
+      DATABASE_URL: postgres://qdjr:qdjr@localhost:5432/qdjr?sslmode=disable
+      TEST_DATABASE_URL: postgres://qdjr:qdjr@localhost:5432/qdjr?sslmode=disable
     defaults:
       run:
         working-directory: apps/api
@@ -31,6 +50,9 @@ jobs:
           go-version: '1.26'
           cache: true
           cache-dependency-path: apps/api/go.sum
+
+      - name: Migrate (goose, embedded)
+        run: go run ./cmd/migrate up
 
       - name: Test
         run: go test -race ./...

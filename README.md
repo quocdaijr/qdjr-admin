@@ -1,6 +1,6 @@
 # qdjr-admin
 
-Admin API (Go/Gin), admin UI (Next.js) and public site (Nuxt) for [qdjr.dev](https://qdjr.dev), backed by Supabase. Replaces the legacy `cmsqdjr` Laravel CMS.
+Admin API (Go/Gin), admin UI (Next.js) and public site (Nuxt) for [qdjr.dev](https://qdjr.dev), on Neon Postgres and Cloudflare R2. Replaces the legacy `cmsqdjr` Laravel CMS.
 
 [![Plan 1](https://img.shields.io/badge/Plan%201-Foundation-success)](docs/superpowers/plans/2026-04-27-qdjr-admin-foundation.md)
 [![Plan 2](https://img.shields.io/badge/Plan%202-Resources%20%2B%20UI-success)](docs/superpowers/plans/2026-04-27-qdjr-admin-resources.md)
@@ -14,7 +14,7 @@ A small, single-source-of-truth publishing stack that costs $0 on free tiers.
 
 ```
 ┌──────────────┐        ┌────────────────────┐        ┌────────────────┐
-│  apps/site   │◄──────►│  apps/api          │◄──────►│   Supabase     │
+│  apps/site   │◄──────►│  apps/api          │◄──────►│   Neon         │
 │  Nuxt 4 SSR  │  REST  │  Go 1.26 + Gin     │  pgx   │   Postgres     │
 │  Netlify     │        │  goose migrations  │        │   + Auth       │
 │  qdjr.dev    │        │  Render (Docker)   │        │   + Storage    │
@@ -33,10 +33,10 @@ A small, single-source-of-truth publishing stack that costs $0 on free tiers.
 
 | Layer | Stack |
 |---|---|
-| **API** | Go 1.26 · Gin · `pgx/v5` · `golang-jwt/v5` · `pressly/goose` (embedded migrations) · Supabase JWKS verification · Render (Docker, singapore) |
+| **API** | Go 1.26 · Gin · `pgx/v5` · `golang-jwt/v5` · `pressly/goose` (embedded migrations) · own HS256 JWT + bcrypt auth · aws-sdk-go-v2 (R2) · Render (Docker, singapore) |
 | **Web** | Next.js 16 (App Router · Turbopack) · React 19 · TypeScript · Tailwind 4 · shadcn/ui (base-ui) · TanStack Query/Table · react-hook-form + zod · Cloudflare Workers (`@opennextjs/cloudflare`) · design system in `design.md` |
 | **Site** | Nuxt 4 · Vue 3 · Tailwind 4 · three.js · markdown-it · Netlify |
-| **Data** | Supabase Postgres 17 · Supabase Auth (email + JWKS) · Supabase Storage |
+| **Data** | Neon Postgres 18 (pooled + direct URLs) · Cloudflare R2 for media (S3 API) |
 | **CI/CD** | GitHub Actions (api / web / keepalive) · Render Blueprint · goose migrations applied by the API at startup |
 
 ## Repo layout
@@ -47,17 +47,15 @@ qdjr-admin/
 │   ├── api/                 # Go backend (Gin + pgx)
 │   │   ├── cmd/api/         # main entrypoint (runs migrations when RUN_MIGRATIONS=true)
 │   │   ├── cmd/migrate/     # goose CLI: up · status · version · up-to N
-│   │   ├── cmd/bootstrap/   # one-shot CLI to seed first super_admin
 │   │   ├── migrations/      # goose SQL migrations (embedded)
-│   │   └── internal/        # config, db, migrate, auth, rbac, http, posts, categories, tags, media, profile, sitesettings, contact, users, adminapi
+│   │   └── internal/        # config, db, migrate, auth, session, rbac, http, posts, categories, tags, media, profile, sitesettings, contact, users, adminapi
 │   ├── web/                 # Next.js 16 admin UI
 │   │   ├── app/             # App Router pages (login, admin/*)
 │   │   ├── components/      # page-header, status-chip, shadcn primitives in ui/
 │   │   ├── lib/             # API client, auth client, types
 │   │   └── e2e/             # Playwright smoke tests
 │   └── site/                # Nuxt 4 public site (qdjr.dev)
-├── supabase/
-│   └── config.toml          # local Postgres only (supabase start)
+├── docker-compose.yml       # local Postgres 18
 ├── infra/
 │   └── dns/                 # DNS record reference
 ├── docs/superpowers/
@@ -95,6 +93,13 @@ Three fixed roles. Permissions are hardcoded in Go behind a `PermissionResolver`
 
 ## API surface (`/v1`)
 
+**Auth** (public, rate-limited per IP):
+
+```
+POST /v1/auth/login     {email, password}  → {access_token, refresh_token, expires_in, user}
+POST /v1/auth/refresh   {refresh_token}    → new pair
+```
+
 **Public** (no auth, served to qdjr.dev):
 
 ```
@@ -113,13 +118,14 @@ POST /v1/contact                        (rate-limited 5/hr/IP)
 
 ```
 GET                  /v1/admin/me
+PATCH                /v1/admin/me/password           {current_password, new_password}
 GET   | POST         /v1/admin/posts
 GET   | PATCH | DEL  /v1/admin/posts/:id
 POST                 /v1/admin/posts/:id/{publish,unpublish}
 GET   | POST         /v1/admin/categories            GET | PATCH | DEL  /v1/admin/categories/:id
 GET   | POST         /v1/admin/tags                  GET | PATCH | DEL  /v1/admin/tags/:id
 GET                  /v1/admin/media
-POST                 /v1/admin/media/{signed-url}    POST  /v1/admin/media   DEL /v1/admin/media/:id
+POST                 /v1/admin/media (multipart: file, alt_text)              DEL /v1/admin/media/:id
 GET   | PATCH        /v1/admin/profile
 GET   | PATCH        /v1/admin/site-settings
 GET                  /v1/admin/contact-messages      PATCH /v1/admin/contact-messages/:id
@@ -130,23 +136,21 @@ GET   | POST         /v1/admin/users                 PATCH /v1/admin/users/:id/r
 
 ## Local development
 
-Prerequisites: Go 1.26+, Node 22+, pnpm 10+, Docker, [Supabase CLI](https://supabase.com/docs/guides/local-development/cli/getting-started).
+Prerequisites: Go 1.26+, Node 22+, pnpm 10+, Docker.
 
 ```bash
-# 1. Start the local Supabase stack (Postgres + Auth + Storage)
-supabase start
+# 1. Start local Postgres 18
+docker compose up -d --wait db
 
 # 2. Apply migrations (goose, embedded in the API)
 cd apps/api
 cp .env.example .env
-# Fill BOOTSTRAP_ADMIN_EMAIL, BOOTSTRAP_ADMIN_PASSWORD, and the values from `supabase status --output env`
+# Set JWT_SECRET (openssl rand -hex 32); BOOTSTRAP_ADMIN_* seed the first super_admin
 env $(grep -v '^#' .env | xargs) go run ./cmd/migrate up
 
-# 3. Bootstrap a super_admin (creates auth user + assigns role)
-env $(grep -v '^#' .env | xargs) go run ./cmd/bootstrap
-
-# 4. Run the API on :8080
-go run ./cmd/api
+# 3. Run the API on :8080 (creates the bootstrap admin on first start;
+#    media goes to tmp/media unless R2_* are set)
+env $(grep -v '^#' .env | xargs) go run ./cmd/api
 
 # 5. In another terminal, run the admin UI on :3000
 cd apps/web
@@ -161,17 +165,14 @@ npm install
 API_URL=http://localhost:8080 npm run dev -- -p 3001
 ```
 
-Open http://localhost:3000/login and sign in as the bootstrap user. Reset everything with `supabase db reset` then step 2 again.
+Open http://localhost:3000/login and sign in as the bootstrap user. Reset everything with `docker compose down -v db` then steps 1–3 again.
 
 ## Testing
 
 ```bash
-# Backend — unit + integration (against local Supabase)
+# Backend — unit + integration (against the local Postgres; CI does the same)
 cd apps/api
-TEST_DATABASE_URL="postgres://postgres:postgres@127.0.0.1:54322/postgres?sslmode=disable" \
-TEST_SUPABASE_URL=http://127.0.0.1:54321 \
-TEST_SUPABASE_SERVICE_ROLE_KEY="<from .env>" \
-go test -race -cover ./...
+TEST_DATABASE_URL="postgres://qdjr:qdjr@127.0.0.1:5432/qdjr?sslmode=disable" go test -race -cover ./...
 
 # Web — typecheck + build
 cd apps/web
@@ -191,7 +192,7 @@ npm test && E2E_BASE_URL=http://localhost:3001 npx playwright test --project=des
 |---|---|---|
 | **Plan 1 — Foundation** | Schema + Go skeleton + auth + RBAC + `/v1/admin/me` + bootstrap CLI | ✅ shipped @ `v0.1.0-foundation` |
 | **Plan 2 — Resources + UI** | All 8 BE resources + admin Web UI + Playwright e2e | ✅ shipped @ `v0.2.0-resources` |
-| **Plan 3 — Production** | goose + Render + Cloudflare + Netlify + site cutover + admin redesign | ✅ code complete; see setup checklist |
+| **Plan 3 — Production** | goose + Render + Cloudflare + Netlify + site cutover + admin redesign + Neon/R2/own auth | ✅ code complete; see setup checklist |
 
 ## Deploy
 
