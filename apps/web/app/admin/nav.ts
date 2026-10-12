@@ -1,5 +1,6 @@
 import {
   Folder,
+  GraduationCap,
   Image as ImageIcon,
   Inbox,
   LayoutDashboard,
@@ -38,6 +39,10 @@ export const NAV_GROUPS: NavGroup[] = [
       { href: '/admin/categories', label: 'Categories', icon: Folder },
       { href: '/admin/tags', label: 'Tags', icon: Tags },
     ],
+  },
+  {
+    label: 'Learn',
+    items: [{ href: '/admin/lessons', label: 'Lessons', icon: GraduationCap }],
   },
   {
     label: 'Site',
