@@ -15,7 +15,7 @@ import (
 // All optional text columns are returned as JSON null when absent. AvatarURL
 // is the resolved public URL (storage prefix + media.storage_path) when an
 // avatar is linked, otherwise nil. Content is the bilingual site copy blob
-// ({"vi": …, "en": …}) owned by apps/site; always a JSON object, {} when unset.
+// ({"vi": …, "en": …}) owned by the public site (quocdaijr/qdjr); always a JSON object, {} when unset.
 type Profile struct {
 	ID          int16             `json:"id"`
 	FullName    *string           `json:"full_name"`

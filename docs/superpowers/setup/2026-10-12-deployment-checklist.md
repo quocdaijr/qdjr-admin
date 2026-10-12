@@ -1,6 +1,6 @@
 # Deployment checklist (one-time, manual)
 
-Pairs with `render.yaml`, `.github/workflows/web.yml`, `netlify.toml`. Work top to bottom.
+Pairs with `render.yaml` and `.github/workflows/web.yml`. Work top to bottom.
 Stack: Neon (Postgres) · Cloudflare R2 (media) · Render (API) · Cloudflare Workers (admin) · Netlify (site).
 
 ## Neon (database)
@@ -36,10 +36,10 @@ Stack: Neon (Postgres) · Cloudflare R2 (media) · Render (API) · Cloudflare Wo
 
 ## Netlify (site)
 
-- [ ] Site settings → Build & deploy → Repository → switch to `quocdaijr/qdjr-admin`, branch `main` (base dir `apps/site` comes from `netlify.toml`).
-- [ ] Environment variables: `APP_URL=https://qdjr.dev`, `API_URL=https://api.qdjr.dev`.
-- [ ] Trigger deploy → `https://qdjr.dev/blog` lists the two seeded posts from the API.
-- [ ] Archive the old `quocdaijr/qdjr` repo (GitHub → Settings → Archive).
+The public site stays in its own repo, `quocdaijr/qdjr`, on its existing Netlify site; it reads the API since quocdaijr/qdjr#29.
+
+- [ ] Optional: Environment variables `APP_URL=https://qdjr.dev`, `API_URL=https://api.qdjr.dev` (the code defaults to both).
+- [ ] Deploy previews run on `*.netlify.app` origins the API does not allow, so client-side navigation and search fail there; production is fine.
 
 ## Done when
 

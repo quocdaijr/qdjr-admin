@@ -5,7 +5,7 @@ Manage records at app.netlify.com → Domains → qdjr.dev.
 
 | Host | Type | Target | Serves |
 |---|---|---|---|
-| `qdjr.dev`, `www` | (existing) | Netlify site | public site (`apps/site`) |
+| `qdjr.dev`, `www` | (existing) | Netlify site | public site (`quocdaijr/qdjr`) |
 | `api` | CNAME | `qdjr-admin-api.onrender.com` | Go API (Render). Add the custom domain in Render → qdjr-admin-api → Settings → Custom Domains first; Render issues the certificate once the CNAME resolves. |
 
 The admin UI has no record for now: it is served at `qdjr-admin.<account>.workers.dev`.
