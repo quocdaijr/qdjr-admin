@@ -41,10 +41,6 @@ The public site stays in its own repo, `quocdaijr/qdjr`, on its existing Netlify
 - [ ] Optional: Environment variables `APP_URL=https://qdjr.dev`, `API_URL=https://api.qdjr.dev` (the code defaults to both).
 - [ ] Deploy previews run on `*.netlify.app` origins the API does not allow, so client-side navigation and search fail there; production is fine.
 
-## Backups
-
-- [ ] Follow `docs/runbooks/database-backup-restore.md` → One-time setup (private bucket `qdjr-backups`, scoped token, three GitHub secrets), then run the `backup` workflow once.
-
 ## Done when
 
 - [ ] `curl https://api.qdjr.dev/v1/posts | jq '.meta.total'` → `2`

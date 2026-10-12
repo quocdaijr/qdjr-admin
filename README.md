@@ -63,7 +63,7 @@ qdjr-admin/
 │   └── setup/               # one-time platform setup checklist
 ├── design.md                # locked admin design system (Cobalt)
 ├── render.yaml              # Render Blueprint (API)
-└── .github/workflows/       # api.yml · web.yml · keepalive.yml · backup.yml (nightly pg_dump → R2)
+└── .github/workflows/       # api.yml · web.yml · keepalive.yml
 ```
 
 ## Conventions
@@ -196,7 +196,6 @@ git push origin main          # api.yml (tests), web.yml (deploy to Cloudflare);
 - Migrations: embedded goose files in `apps/api/migrations`, applied by the API at startup (`RUN_MIGRATIONS=true` on Render). Locally `go run ./cmd/migrate up|status`.
 - API logs: Render dashboard → `qdjr-admin-api` → Logs
 - Manual admin deploy: `cd apps/web && pnpm run deploy`
-- Backups: nightly `pg_dump` to the private R2 bucket `qdjr-backups` (newest 30). Restore: [`docs/runbooks/database-backup-restore.md`](docs/runbooks/database-backup-restore.md)
 
 Domains: `api.qdjr.dev` (Render), `qdjr.dev` (Netlify), admin on `*.workers.dev`. DNS in [`infra/dns/README.md`](infra/dns/README.md).
 
