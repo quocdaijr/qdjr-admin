@@ -55,3 +55,13 @@
 5. **Admin UI.** `lib/auth.ts` on API tokens (single-flight refresh, 401 retry once, cross-tab sign-out), remove `@supabase/supabase-js`, dropzone multipart with progress, invite requires password, change-password dialog, env/web.yml cleanup. *Done when:* tsc/lint/build green; Playwright login, post lifecycle, profile content, user menu pass; new e2e for change password.
 6. **CI + docs.** Postgres service in `api.yml`; CLAUDE.md, README, checklist, DNS, `.claude/commands`. *Done when:* PR checks green with DB tests running in CI.
 7. **Verification.** Full walkthrough (15 rows) + site e2e parity + Worker preview e2e. *Done when:* all PASS, evidence in execution notes.
+
+## Execution notes (2026-10-12)
+
+All seven tasks done on `feature/dainq/goose-render-cloudflare-site-cutover` (PR #1).
+
+- **Behaviour changes worth knowing:** inviting an existing email now returns 409 `EMAIL_TAKEN` (was: silently reuse the Supabase account); invite requires an initial password (10–72 chars); SVG uploads are rejected; refresh re-reads the account so a deleted user's session ends at the next refresh (access tokens live ≤ 15 min).
+- **Deviation:** goose's version table is not guarded by an advisory lock in this repo's `migrate` package (single Render instance), so `MIGRATIONS_DATABASE_URL` exists to keep DDL off the pooler, not for lock safety.
+- **Found and fixed while verifying:** `apps/web/.env.example` was never committed (ignored by `.env*`); `rbac` store test leaked one user per run (pool closed before `t.Cleanup`).
+- **Evidence:** API `go test -race ./...` with DB tests (local Postgres 18 and CI, 0 skipped), golangci-lint 0 issues; real-binary smoke (seed, login, refresh misuse, upload/serve/delete, SVG rejected); admin Playwright 6/6 on `next dev` and 6/6 inside the OpenNext Worker preview; 15-row browser walkthrough all PASS; PR checks green.
+- **Not verifiable locally:** real Neon and R2 endpoints. The R2 driver is tested against a fake S3 endpoint (request method, path-style key, content type); first contact with the real services happens on the Render deploy (see the checklist).
