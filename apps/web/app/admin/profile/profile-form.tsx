@@ -33,7 +33,17 @@ const schema = z.object({
     .optional()
     .or(z.literal('')),
   social_links: z.array(z.object({ key: z.string(), url: z.string() })),
+  content: z.string().refine(isJsonObject, 'Must be a JSON object'),
 });
+
+function isJsonObject(raw: string): boolean {
+  try {
+    const value: unknown = JSON.parse(raw);
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
+  } catch {
+    return false;
+  }
+}
 
 type FormValues = z.infer<typeof schema>;
 
@@ -46,6 +56,7 @@ function defaults(p?: Profile | null): FormValues {
     location: p?.location ?? '',
     email: p?.email ?? '',
     social_links: socialLinksToRows(p?.social_links),
+    content: JSON.stringify(p?.content ?? {}, null, 2),
   };
 }
 
@@ -163,6 +174,20 @@ export function ProfileForm() {
         />
       </Field>
 
+      <Field label="Site content (JSON)" error={errors.content?.message} htmlFor="profile-content">
+        <Textarea
+          id="profile-content"
+          {...register('content')}
+          rows={24}
+          spellCheck={false}
+          className="font-mono text-xs"
+        />
+        <p className="text-xs text-muted-foreground">
+          Copy for qdjr.dev / and /about, one object per language: {'{ "vi": {…}, "en": {…} }'}.
+          Shape lives in apps/site/app/data/profile.ts.
+        </p>
+      </Field>
+
       <div>
         <Button type="submit" disabled={submitting}>
           {submitting ? 'Saving…' : 'Save'}
@@ -175,15 +200,17 @@ export function ProfileForm() {
 function Field({
   label,
   error,
+  htmlFor,
   children,
 }: {
   label: string;
   error?: string;
+  htmlFor?: string;
   children: React.ReactNode;
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <Label>{label}</Label>
+      <Label htmlFor={htmlFor}>{label}</Label>
       {children}
       {error ? <p className="text-xs text-destructive">{error}</p> : null}
     </div>
@@ -201,6 +228,7 @@ function toApiBody(values: FormValues) {
       values.location && values.location !== '' ? values.location : null,
     email: values.email && values.email !== '' ? values.email : null,
     social_links: rowsToSocialLinks(values.social_links),
+    content: JSON.parse(values.content) as Record<string, unknown>,
   };
 }
 
