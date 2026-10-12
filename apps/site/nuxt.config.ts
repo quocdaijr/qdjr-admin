@@ -106,10 +106,6 @@ export default defineNuxtConfig({
   // Global CSS — Tailwind v4 entrypoint
   css: ['~/assets/css/main.css'],
 
-  // Plugins are auto-scanned from <srcDir>/plugins and deduped by resolved path,
-  // so listing them here was redundant. Dropping the array also removes eight
-  // hardcoded paths that would need maintaining.
-
   // Auto import components
   components: true,
 
@@ -141,9 +137,6 @@ export default defineNuxtConfig({
       fallbackLocale: 'vi'
     }
   },
-
-  // No pinia.storesDirs override needed: <srcDir>/stores (app/stores) is the
-  // default now that the sources live under app/.
 
   // PWA configuration (updated for @vite-pwa/nuxt)
   pwa: {
@@ -190,34 +183,9 @@ export default defineNuxtConfig({
     }
   },
 
-  // Build tuning
+  // Tailwind v4. Replaces @nuxtjs/tailwindcss, which is pinned to tailwindcss
+  // ~3.4 and has no v4 support.
   vite: {
-    // Tailwind v4. Replaces @nuxtjs/tailwindcss, which is pinned to
-    // tailwindcss ~3.4 and has no v4 support.
-    plugins: [tailwindcss()],
-    build: {
-      // The main bundle is ~1MB because several legacy client plugins (prismjs
-      // with many languages, video.js, vue-spinner) are registered globally.
-      // They only run on /legacy-blogs/* but are bundled eagerly. The whole
-      // legacy surface is slated for removal, so raising the warning threshold
-      // here is intentional until that happens. three.js is NOT part of this:
-      // it is reached only through dynamic imports in app/scenes/* and lands in
-      // its own async chunk.
-      chunkSizeWarningLimit: 1200
-    }
-  },
-
-  // PostCSS: rewrite the deprecated `color-adjust` shorthand to `print-color-adjust`
-  // before Vite's CSS processor warns on it. Needed because prismjs still ships the
-  // deprecated form in its plugin CSS (node_modules/prismjs/plugins/line-highlight/*.css)
-  // and we can't edit vendor files.
-  postcss: {
-    plugins: {
-      // Anchored with ~~ (rootDir) rather than a bare relative path so resolution
-      // stays unambiguous when srcDir moves to app/ and under Vite 8.
-      '~~/postcss-plugins/rewrite-color-adjust.cjs': {}
-    }
-  },
-
-  // Note: Robots and sitemap configuration will be added back in next phase
+    plugins: [tailwindcss()]
+  }
 })

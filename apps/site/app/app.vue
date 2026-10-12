@@ -20,7 +20,7 @@ useHead(() => ({
 // useProfile() / useSiteSettings() via useNuxtData('site-shell'). Each part
 // degrades to null on its own so one failing call never blanks the page.
 const {$api} = useNuxtApp()
-const quiet = async <T>(label: string, load: () => Promise<T | null>): Promise<T | null> => {
+async function quiet<T>(label: string, load: () => Promise<T | null>): Promise<T | null> {
   try {
     return await load()
   } catch (error) {
