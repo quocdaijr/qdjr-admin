@@ -21,7 +21,10 @@ func TestPGStore_RoleForUser(t *testing.T) {
 	defer cancel()
 	pool, err := pgxpool.New(ctx, dsn)
 	require.NoError(t, err)
-	defer pool.Close()
+	// t.Cleanup (not defer): cleanups run LIFO after the test, so the row
+	// delete below runs before the pool closes. With defer the pool closed
+	// first and every run leaked a user.
+	t.Cleanup(pool.Close)
 
 	// Insert a fake public.users row.
 	// Use a per-run unique email so reruns don't collide on users_email_partial_key.
