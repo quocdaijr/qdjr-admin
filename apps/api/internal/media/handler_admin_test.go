@@ -5,8 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"image"
+	"image/png"
+	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -35,7 +40,7 @@ func newStubRepo() *stubRepo {
 	return &stubRepo{rows: map[uuid.UUID]Media{}}
 }
 
-func (s *stubRepo) List(_ context.Context, f AdminListFilter) ([]Media, int, error) {
+func (s *stubRepo) List(_ context.Context, _ AdminListFilter) ([]Media, int, error) {
 	out := make([]Media, 0, len(s.rows))
 	for _, m := range s.rows {
 		out = append(out, m)
@@ -88,22 +93,26 @@ func (s *stubRepo) Delete(_ context.Context, id uuid.UUID) error {
 
 // stubStorage is an in-memory Storage stub for handler tests.
 type stubStorage struct {
-	signedURL    string
-	signedErr    error
-	signedPath   string
-	deleted      []string
-	deleteErr    error
+	put       map[string][]byte
+	putType   map[string]string
+	putErr    error
+	deleted   []string
+	deleteErr error
 }
 
-func (s *stubStorage) SignedUploadURL(_ context.Context, path string) (string, error) {
-	s.signedPath = path
-	if s.signedErr != nil {
-		return "", s.signedErr
+func (s *stubStorage) Put(_ context.Context, key, contentType string, body io.Reader, _ int64) error {
+	if s.putErr != nil {
+		return s.putErr
 	}
-	if s.signedURL != "" {
-		return s.signedURL, nil
+	b, err := io.ReadAll(body)
+	if err != nil {
+		return err
 	}
-	return "https://stor.example/upload/" + path + "?token=t", nil
+	if s.put == nil {
+		s.put, s.putType = map[string][]byte{}, map[string]string{}
+	}
+	s.put[key], s.putType[key] = b, contentType
+	return nil
 }
 
 func (s *stubStorage) Delete(_ context.Context, path string) error {
@@ -153,6 +162,44 @@ func newAdminEnv(role string, perms ...string) *adminTestEnv {
 	return &adminTestEnv{router: r, repo: repo, storage: storage, res: res}
 }
 
+func bearer(uid uuid.UUID) string {
+	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"sub": uid.String(),
+		"exp": time.Now().Add(time.Hour).Unix(),
+	})
+	signed, _ := tok.SignedString([]byte(adminTestSecret))
+	return "Bearer " + signed
+}
+
+// upload posts a multipart form with one "file" part (and optional alt_text).
+func (e *adminTestEnv) upload(t *testing.T, uid uuid.UUID, filename string, content []byte, altText string) *httptest.ResponseRecorder {
+	t.Helper()
+	var buf bytes.Buffer
+	w := multipart.NewWriter(&buf)
+	fw, err := w.CreateFormFile("file", filename)
+	require.NoError(t, err)
+	_, err = fw.Write(content)
+	require.NoError(t, err)
+	if altText != "" {
+		require.NoError(t, w.WriteField("alt_text", altText))
+	}
+	require.NoError(t, w.Close())
+	req := httptest.NewRequest(http.MethodPost, "/v1/admin/media", &buf)
+	req.Header.Set("Content-Type", w.FormDataContentType())
+	req.Header.Set("Authorization", bearer(uid))
+	rr := httptest.NewRecorder()
+	e.router.ServeHTTP(rr, req)
+	return rr
+}
+
+// pngBytes returns a real w×h PNG.
+func pngBytes(t *testing.T, w, h int) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	require.NoError(t, png.Encode(&buf, image.NewRGBA(image.Rect(0, 0, w, h))))
+	return buf.Bytes()
+}
+
 func (e *adminTestEnv) do(t *testing.T, uid uuid.UUID, method, path string, body any) *httptest.ResponseRecorder {
 	t.Helper()
 	var buf *bytes.Buffer
@@ -190,104 +237,79 @@ func TestAdmin_List_Forbidden(t *testing.T) {
 	assert.Equal(t, http.StatusForbidden, rr.Code)
 }
 
-func TestAdmin_SignedURL_OK(t *testing.T) {
-	env := newAdminEnv("author", "media:write")
+func TestAdmin_Upload_PNG_OK(t *testing.T) {
+	env := newAdminEnv("editor", "media:write")
 	uid := uuid.New()
-	rr := env.do(t, uid, http.MethodPost, "/v1/admin/media/signed-url", map[string]any{
-		"filename":  "logo.png",
-		"mime_type": "image/png",
-		"size":      2048,
-	})
-	require.Equal(t, http.StatusOK, rr.Code)
-	var body struct {
-		Data signedURLResponse `json:"data"`
+	rr := env.upload(t, uid, "photo.PNG", pngBytes(t, 3, 2), "a tiny test")
+	require.Equal(t, http.StatusCreated, rr.Code, rr.Body.String())
+
+	in := env.repo.createIn
+	assert.Regexp(t, `^media/[0-9a-f-]{36}\.png$`, in.StoragePath)
+	assert.Equal(t, "image/png", in.MimeType, "type comes from the bytes")
+	assert.Equal(t, "photo.PNG", in.Filename)
+	require.NotNil(t, in.Width)
+	require.NotNil(t, in.Height)
+	assert.Equal(t, 3, *in.Width)
+	assert.Equal(t, 2, *in.Height)
+	require.NotNil(t, in.AltText)
+	assert.Equal(t, "a tiny test", *in.AltText)
+	assert.Equal(t, uid, in.UploadedBy)
+	assert.Equal(t, "image/png", env.storage.putType[in.StoragePath])
+	assert.Equal(t, int64(len(env.storage.put[in.StoragePath])), in.Size)
+}
+
+func TestAdmin_Upload_RejectsSVGAndText(t *testing.T) {
+	cases := map[string][]byte{
+		"evil.svg":  []byte(`<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>`),
+		"note.png":  []byte("just text pretending to be a png"),
+		"empty.png": {},
 	}
-	require.NoError(t, json.Unmarshal(rr.Body.Bytes(), &body))
-	assert.True(t, len(body.Data.StoragePath) > len("media/"), "storage_path should be set")
-	assert.NotEmpty(t, body.Data.SignedURL)
-	assert.Equal(t, signedURLTTL, body.Data.ExpiresIn)
-	// Storage was called with the matching path.
-	assert.Equal(t, body.Data.StoragePath, env.storage.signedPath)
+	for name, body := range cases {
+		env := newAdminEnv("editor", "media:write")
+		rr := env.upload(t, uuid.New(), name, body, "")
+		assert.Equal(t, http.StatusBadRequest, rr.Code, name)
+		assert.Empty(t, env.storage.put, name)
+	}
 }
 
-func TestAdmin_SignedURL_BadMime(t *testing.T) {
-	env := newAdminEnv("author", "media:write")
-	uid := uuid.New()
-	rr := env.do(t, uid, http.MethodPost, "/v1/admin/media/signed-url", map[string]any{
-		"filename":  "doc.pdf",
-		"mime_type": "application/pdf",
-		"size":      2048,
-	})
+func TestAdmin_Upload_TooLarge(t *testing.T) {
+	env := newAdminEnv("editor", "media:write")
+	big := append(pngBytes(t, 1, 1), bytes.Repeat([]byte{0}, int(MaxUploadSize))...)
+	rr := env.upload(t, uuid.New(), "big.png", big, "")
+	assert.Equal(t, http.StatusRequestEntityTooLarge, rr.Code)
+	assert.Empty(t, env.storage.put)
+}
+
+func TestAdmin_Upload_MissingFile(t *testing.T) {
+	env := newAdminEnv("editor", "media:write")
+	rr := env.do(t, uuid.New(), http.MethodPost, "/v1/admin/media", map[string]any{"filename": "x.png"})
 	assert.Equal(t, http.StatusBadRequest, rr.Code)
 }
 
-func TestAdmin_SignedURL_OversizedRejected(t *testing.T) {
-	env := newAdminEnv("author", "media:write")
-	uid := uuid.New()
-	rr := env.do(t, uid, http.MethodPost, "/v1/admin/media/signed-url", map[string]any{
-		"filename":  "big.png",
-		"mime_type": "image/png",
-		"size":      MaxUploadSize + 1,
-	})
-	assert.Equal(t, http.StatusBadRequest, rr.Code)
-}
-
-func TestAdmin_SignedURL_StorageFailure(t *testing.T) {
-	env := newAdminEnv("author", "media:write")
-	env.storage.signedErr = errors.New("boom")
-	uid := uuid.New()
-	rr := env.do(t, uid, http.MethodPost, "/v1/admin/media/signed-url", map[string]any{
-		"filename":  "ok.png",
-		"mime_type": "image/png",
-		"size":      512,
-	})
+func TestAdmin_Upload_StorageFailureCreatesNoRow(t *testing.T) {
+	env := newAdminEnv("editor", "media:write")
+	env.storage.putErr = errors.New("r2 down")
+	rr := env.upload(t, uuid.New(), "a.png", pngBytes(t, 1, 1), "")
 	assert.Equal(t, http.StatusBadGateway, rr.Code)
+	assert.Empty(t, env.repo.rows)
 }
 
-func TestAdmin_Create_OK(t *testing.T) {
-	env := newAdminEnv("author", "media:write")
-	uid := uuid.New()
-	path := "media/" + uuid.New().String() + ".png"
-	rr := env.do(t, uid, http.MethodPost, "/v1/admin/media", map[string]any{
-		"filename":     "ok.png",
-		"storage_path": path,
-		"mime_type":    "image/png",
-		"size":         1024,
-	})
-	require.Equal(t, http.StatusCreated, rr.Code)
-	assert.Equal(t, path, env.repo.createIn.StoragePath)
-	assert.Equal(t, uid, env.repo.createIn.UploadedBy)
-}
-
-func TestAdmin_Create_BadStoragePath(t *testing.T) {
-	env := newAdminEnv("author", "media:write")
-	uid := uuid.New()
-	rr := env.do(t, uid, http.MethodPost, "/v1/admin/media", map[string]any{
-		"filename":     "ok.png",
-		"storage_path": "wrong/path.png",
-		"mime_type":    "image/png",
-		"size":         1024,
-	})
-	assert.Equal(t, http.StatusBadRequest, rr.Code)
-}
-
-func TestAdmin_Create_AltTextTooLong(t *testing.T) {
-	env := newAdminEnv("author", "media:write")
-	uid := uuid.New()
-	long := make([]byte, 501)
-	for i := range long {
-		long[i] = 'a'
+func TestAdmin_Upload_DBFailureRemovesStoredFile(t *testing.T) {
+	env := newAdminEnv("editor", "media:write")
+	env.repo.createErr = errors.New("db down")
+	rr := env.upload(t, uuid.New(), "a.png", pngBytes(t, 1, 1), "")
+	assert.Equal(t, http.StatusInternalServerError, rr.Code)
+	require.Len(t, env.storage.put, 1)
+	for key := range env.storage.put {
+		assert.Equal(t, []string{key}, env.storage.deleted, "orphaned object is cleaned up")
 	}
-	alt := string(long)
-	path := "media/" + uuid.New().String() + ".png"
-	rr := env.do(t, uid, http.MethodPost, "/v1/admin/media", map[string]any{
-		"filename":     "ok.png",
-		"storage_path": path,
-		"mime_type":    "image/png",
-		"size":         1024,
-		"alt_text":     alt,
-	})
+}
+
+func TestAdmin_Upload_AltTextTooLong(t *testing.T) {
+	env := newAdminEnv("editor", "media:write")
+	rr := env.upload(t, uuid.New(), "a.png", pngBytes(t, 1, 1), strings.Repeat("x", 501))
 	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Empty(t, env.storage.put)
 }
 
 func TestAdmin_Create_NoWritePerm(t *testing.T) {

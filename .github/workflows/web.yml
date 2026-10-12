@@ -1,42 +1,77 @@
 name: web
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/web/**'
+      - '.github/workflows/web.yml'
   pull_request:
     branches: [main]
     paths:
       - 'apps/web/**'
       - '.github/workflows/web.yml'
 
+permissions:
+  contents: read
+
 jobs:
   checks:
     name: typecheck + lint + build
     runs-on: ubuntu-latest
+    env:
+      # PR checks fall back to the local API URL when the repo variable is not
+      # set; nothing built here is deployed.
+      NEXT_PUBLIC_API_URL: ${{ vars.NEXT_PUBLIC_API_URL || 'http://localhost:8080' }}
     defaults:
       run:
         working-directory: apps/web
     steps:
       - uses: actions/checkout@v4
-
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v4
         with:
           version: 10
-
-      - name: Set up Node
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'pnpm'
           cache-dependency-path: apps/web/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec tsc --noEmit
+      - run: pnpm lint
+      - run: pnpm build
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Typecheck
-        run: pnpm exec tsc --noEmit
-
-      - name: Lint
-        run: pnpm lint
-
-      - name: Build
-        run: pnpm build
+  deploy:
+    name: deploy to Cloudflare Workers
+    needs: checks
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    env:
+      # Public build-time values (inlined into the bundle). Set as repository
+      # variables: Settings → Secrets and variables → Actions → Variables.
+      NEXT_PUBLIC_API_URL: ${{ vars.NEXT_PUBLIC_API_URL }}
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - name: Require production build variables
+        run: |
+          for v in NEXT_PUBLIC_API_URL; do
+            if [ -z "${!v}" ]; then echo "::error::repository variable $v is not set"; exit 1; fi
+          done
+        working-directory: .
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+          cache-dependency-path: apps/web/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec opennextjs-cloudflare build
+      - run: pnpm exec wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

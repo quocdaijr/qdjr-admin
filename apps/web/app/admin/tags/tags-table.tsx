@@ -92,12 +92,12 @@ export function TagsTable() {
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <form onSubmit={onSearchSubmit} className="flex items-center gap-2">
+        <form onSubmit={onSearchSubmit} className="flex w-full min-w-0 items-center gap-2 sm:w-auto">
           <Input
             placeholder="Search name or slug…"
             value={qInput}
             onChange={(e) => setQInput(e.target.value)}
-            className="w-64"
+            className="min-w-0 flex-1 sm:w-64 sm:flex-none"
           />
           <Button type="submit" variant="outline" size="sm">
             Search
@@ -106,7 +106,7 @@ export function TagsTable() {
         <Button onClick={() => setCreateOpen(true)}>New tag</Button>
       </div>
 
-      <div className="rounded-lg border">
+      <div className="overflow-x-auto rounded-[10px] border bg-card">
         <Table>
           <TableHeader>
             <TableRow>
@@ -134,7 +134,7 @@ export function TagsTable() {
               ))
             ) : isError ? (
               <TableRow>
-                <TableCell colSpan={4} className="text-center text-red-600">
+                <TableCell colSpan={4} className="text-center text-destructive">
                   {error instanceof Error
                     ? error.message
                     : 'Failed to load tags'}

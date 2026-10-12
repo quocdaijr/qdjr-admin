@@ -32,6 +32,8 @@ import {
 } from '@/components/ui/popover';
 import { Checkbox } from '@/components/ui/checkbox';
 import { MediaPicker } from '@/components/media-picker';
+import { PageHeader } from '@/components/page-header';
+import { StatusChip } from '@/components/status-chip';
 
 import { PostActions } from './post-actions';
 
@@ -165,28 +167,28 @@ export function PostForm({ initial }: PostFormProps) {
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">
-          {isEdit ? 'Edit post' : 'New post'}
-        </h1>
-        <div className="flex items-center gap-2">
-          {isEdit && initial ? (
-            <PostActions post={initial} />
-          ) : null}
-          <Button type="submit" disabled={submitting}>
-            {submitting ? 'Saving…' : isEdit ? 'Save' : 'Create'}
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        title={isEdit ? 'Edit post' : 'New post'}
+        meta={isEdit && initial ? <StatusChip status={initial.status} /> : 'unsaved'}
+        actions={
+          <>
+            {isEdit && initial ? <PostActions post={initial} /> : null}
+            <Button type="submit" disabled={submitting}>
+              {submitting ? 'Saving…' : isEdit ? 'Save' : 'Create'}
+            </Button>
+          </>
+        }
+      />
 
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-        <div className="flex flex-col gap-4 md:col-span-2">
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_300px]">
+        <div className="flex min-w-0 flex-col gap-5">
           <FormField label="Title" error={errors.title?.message}>
             <Input
               {...register('title', {
                 onBlur: handleTitleBlur,
               })}
               placeholder="Post title"
+              className="h-12 font-heading text-xl font-semibold"
             />
           </FormField>
 
@@ -200,6 +202,7 @@ export function PostForm({ initial }: PostFormProps) {
                 onChange: () => setSlugTouched(true),
               })}
               placeholder="my-post-slug"
+              className="font-mono text-sm"
             />
           </FormField>
 
@@ -218,14 +221,14 @@ export function PostForm({ initial }: PostFormProps) {
           >
             <Textarea
               {...register('content')}
-              rows={15}
+              rows={24}
               placeholder="Write your post…"
-              className="font-mono"
+              className="min-h-[28rem] font-mono text-[13px] leading-6"
             />
           </FormField>
         </div>
 
-        <div className="flex flex-col gap-4">
+        <aside className="flex flex-col gap-4 lg:sticky lg:top-20 lg:self-start lg:border-l lg:pl-6">
           <FormField label="Status" error={errors.status?.message}>
             <Controller
               control={control}
@@ -348,7 +351,7 @@ export function PostForm({ initial }: PostFormProps) {
               placeholder="SEO description"
             />
           </FormField>
-        </div>
+        </aside>
       </div>
     </form>
   );

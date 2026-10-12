@@ -1,0 +1,17 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "qdjr-admin",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2025-09-01",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "workers_dev": true,
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "services": [
+    { "binding": "WORKER_SELF_REFERENCE", "service": "qdjr-admin" }
+  ]
+  // Custom domain later: "routes": [{ "pattern": "admin.qdjr.dev", "custom_domain": true }]
+  // — requires the qdjr.dev zone on Cloudflare (DNS is on Netlify today).
+}

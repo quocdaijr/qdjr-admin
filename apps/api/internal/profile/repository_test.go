@@ -41,27 +41,27 @@ func newFixture(t *testing.T) *fixture {
 	var (
 		fullName, bio, tagline, location, email *string
 		avatarID                                *uuid.UUID
-		socialLinks                             []byte
+		socialLinks, content                    []byte
 	)
 	err = pool.QueryRow(ctx,
-		`select full_name, bio, avatar_id, tagline, social_links, location, email
+		`select full_name, bio, avatar_id, tagline, social_links, location, email, content
 		   from public.profile where id = 1`,
-	).Scan(&fullName, &bio, &avatarID, &tagline, &socialLinks, &location, &email)
+	).Scan(&fullName, &bio, &avatarID, &tagline, &socialLinks, &location, &email, &content)
 	require.NoError(t, err)
 
 	t.Cleanup(func() {
 		bg := context.Background()
 		_, _ = pool.Exec(bg,
 			`update public.profile set full_name=$1, bio=$2, avatar_id=$3,
-			   tagline=$4, social_links=$5::jsonb, location=$6, email=$7
+			   tagline=$4, social_links=$5::jsonb, location=$6, email=$7, content=$8::jsonb
 			 where id = 1`,
-			fullName, bio, avatarID, tagline, socialLinks, location, email,
+			fullName, bio, avatarID, tagline, socialLinks, location, email, content,
 		)
 	})
 
 	authorID := uuid.New()
 	_, err = pool.Exec(ctx,
-		`insert into auth.users (id, email) values ($1, $2)`,
+		`insert into public.users (id, email, password_hash) values ($1, $2, 'test-hash')`,
 		authorID, fmt.Sprintf("profile-test-%s@example.com", authorID),
 	)
 	require.NoError(t, err)
@@ -80,7 +80,7 @@ func newFixture(t *testing.T) *fixture {
 		// but explicit decoupling makes ordering obvious).
 		_, _ = pool.Exec(bg, `update public.profile set avatar_id = null where id = 1`)
 		_, _ = pool.Exec(bg, `delete from public.media where id = $1`, mediaID)
-		_, _ = pool.Exec(bg, `delete from auth.users where id = $1`, authorID)
+		_, _ = pool.Exec(bg, `delete from public.users where id = $1`, authorID)
 	})
 
 	return &fixture{t: t, pool: pool, ctx: ctx, authorID: authorID, mediaID: mediaID}

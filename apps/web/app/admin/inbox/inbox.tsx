@@ -126,7 +126,7 @@ function InboxTab({ status, active, onSelect }: InboxTabProps) {
               ))
             ) : isError ? (
               <TableRow>
-                <TableCell colSpan={3} className="text-center text-red-600">
+                <TableCell colSpan={3} className="text-center text-destructive">
                   {error instanceof Error
                     ? error.message
                     : 'Failed to load messages'}

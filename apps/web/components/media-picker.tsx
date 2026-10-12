@@ -139,7 +139,7 @@ function MediaPickerDialog({
             ))}
           </div>
         ) : isError ? (
-          <p className="text-center text-red-600">
+          <p className="text-center text-destructive">
             {error instanceof Error ? error.message : 'Failed to load media'}
           </p>
         ) : items.length === 0 ? (

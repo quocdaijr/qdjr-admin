@@ -1,3 +1,4 @@
+// Package rbac resolves roles and permissions for authenticated users.
 package rbac
 
 import (

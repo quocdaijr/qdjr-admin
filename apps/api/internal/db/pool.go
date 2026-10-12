@@ -1,3 +1,4 @@
+// Package db opens the pgx connection pool.
 package db
 
 import (
@@ -8,8 +9,15 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// NewPool opens a pgx connection pool and verifies connectivity with a Ping.
-// Tunes pool size and lifetime for a typical Cloud Run workload (small + bursty).
+// First-connect retry budget: 1+2+4+8 s of waits covers a Neon cold start.
+const (
+	connectAttempts = 5
+	connectBackoff  = time.Second
+)
+
+// NewPool opens a pgx connection pool and verifies connectivity with a Ping
+// (retried, see Retry). Sized for one small web instance; Neon's pooled
+// endpoint (PgBouncer) multiplexes these onto the database.
 func NewPool(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
 	cfg, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
@@ -24,7 +32,7 @@ func NewPool(ctx context.Context, dsn string) (*pgxpool.Pool, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open pool: %w", err)
 	}
-	if err := pool.Ping(ctx); err != nil {
+	if err := Retry(ctx, connectAttempts, connectBackoff, pool.Ping); err != nil {
 		pool.Close()
 		return nil, fmt.Errorf("ping: %w", err)
 	}

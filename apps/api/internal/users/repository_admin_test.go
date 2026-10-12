@@ -14,7 +14,7 @@ import (
 )
 
 // adminFixture connects to TEST_DATABASE_URL and provides per-test cleanup
-// helpers for inserted auth.users / user_roles rows.
+// helpers for inserted public.users / user_roles rows.
 type adminFixture struct {
 	t    *testing.T
 	pool *pgxpool.Pool
@@ -36,19 +36,19 @@ func newAdminFixture(t *testing.T) *adminFixture {
 	return &adminFixture{t: t, pool: pool, ctx: ctx}
 }
 
-// insertUser inserts a fresh row in auth.users with random uuid + email and
-// registers cleanup that removes the user_roles + auth.users rows.
+// insertUser inserts a fresh row in public.users with random uuid + email and
+// registers cleanup that removes the user_roles + public.users rows.
 func (f *adminFixture) insertUser() uuid.UUID {
 	f.t.Helper()
 	id := uuid.New()
 	email := fmt.Sprintf("users-admin-test-%s@example.com", id)
 	_, err := f.pool.Exec(f.ctx,
-		`insert into auth.users (id, email, created_at) values ($1, $2, now())`, id, email)
+		`insert into public.users (id, email, password_hash, created_at) values ($1, $2, 'test-hash', now())`, id, email)
 	require.NoError(f.t, err)
 	f.t.Cleanup(func() {
 		bg := context.Background()
 		_, _ = f.pool.Exec(bg, `delete from public.user_roles where user_id = $1`, id)
-		_, _ = f.pool.Exec(bg, `delete from auth.users where id = $1`, id)
+		_, _ = f.pool.Exec(bg, `delete from public.users where id = $1`, id)
 	})
 	return id
 }

@@ -1,18 +1,20 @@
+version: "2"
 run:
   timeout: 3m
 linters:
   enable:
     - errcheck
-    - gosimple
     - govet
     - ineffassign
-    - staticcheck
+    - staticcheck # includes the former gosimple checks
     - unused
+    - revive
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - errcheck
+formatters:
+  enable:
     - gofmt
     - goimports
-    - revive
-issues:
-  exclude-rules:
-    - path: _test\.go
-      linters:
-        - errcheck

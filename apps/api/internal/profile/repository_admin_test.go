@@ -1,6 +1,7 @@
 package profile
 
 import (
+	"encoding/json"
 	"fmt"
 	"testing"
 
@@ -95,4 +96,18 @@ func TestAdminRepository_Update_SocialLinksReplace(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Empty(t, got.SocialLinks)
+}
+
+func TestAdminRepository_Update_Content_RoundTrips(t *testing.T) {
+	f := newFixture(t)
+	repo := NewAdminRepository(f.pool, "")
+
+	content := json.RawMessage(`{"vi":{"quote":{"text":"x","author":"y"}},"en":{}}`)
+	got, err := repo.Update(f.ctx, UpdateInput{Content: &content, UpdatedBy: f.authorID})
+	require.NoError(t, err)
+	assert.JSONEq(t, string(content), string(got.Content))
+
+	pub, err := NewRepository(f.pool, "").Get(f.ctx)
+	require.NoError(t, err)
+	assert.JSONEq(t, string(content), string(pub.Content))
 }

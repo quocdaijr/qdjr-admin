@@ -20,7 +20,7 @@ func RegisterPublic(g *gin.RouterGroup, repo Writer, limiter *Limiter) {
 
 func postHandler(repo Writer, limiter *Limiter) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		ip := clientIP(c)
+		ip := ClientIP(c)
 		if !limiter.Allow(ip) {
 			apphttp.Err(c, http.StatusTooManyRequests, "RATE_LIMITED", "too many requests")
 			return
@@ -55,11 +55,11 @@ func postHandler(repo Writer, limiter *Limiter) gin.HandlerFunc {
 	}
 }
 
-// clientIP extracts the requester IP, preferring proxy headers when present.
+// ClientIP extracts the requester IP, preferring proxy headers when present.
 //
 // Order: X-Forwarded-For (first hop), X-Real-IP, RemoteAddr. Returns "" if
 // none can be parsed — callers should treat empty as "do not record".
-func clientIP(c *gin.Context) string {
+func ClientIP(c *gin.Context) string {
 	if v := c.GetHeader("X-Forwarded-For"); v != "" {
 		if i := strings.Index(v, ","); i > 0 {
 			return strings.TrimSpace(v[:i])

@@ -23,7 +23,7 @@ func TestLimiter_PerIPIndependent(t *testing.T) {
 
 	// Exhaust IP A.
 	for i := 0; i < limiterBurst; i++ {
-		require_(t, l.Allow("10.0.0.1"))
+		requireTrue(t, l.Allow("10.0.0.1"))
 	}
 	assert.False(t, l.Allow("10.0.0.1"), "A should be limited")
 
@@ -41,8 +41,8 @@ func TestLimiter_Evict(t *testing.T) {
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	l.now = func() time.Time { return base }
 
-	require_(t, l.Allow("a"))
-	require_(t, l.Allow("b"))
+	requireTrue(t, l.Allow("a"))
+	requireTrue(t, l.Allow("b"))
 
 	// Advance past the idle TTL.
 	l.now = func() time.Time { return base.Add(2 * limiterIdleTTL) }
@@ -55,7 +55,7 @@ func TestLimiter_Evict(t *testing.T) {
 
 // tiny helper: gin/testify's require uses *T's FailNow; we want a plain
 // assertion that boolean is true without importing require here.
-func require_(t *testing.T, ok bool) {
+func requireTrue(t *testing.T, ok bool) {
 	t.Helper()
 	if !ok {
 		t.Fatalf("expected true")

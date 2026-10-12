@@ -151,9 +151,7 @@ func adminUpdateHandler(repo AdminWriter) gin.HandlerFunc {
 			apphttp.Err(c, http.StatusBadRequest, "INVALID", "slug must match ^[a-z0-9]+(-[a-z0-9]+)*$ and be ≤200 chars")
 			return
 		}
-		out, err := repo.Update(c.Request.Context(), id, UpdateInput{
-			Slug: p.Slug, Name: p.Name, Description: p.Description,
-		})
+		out, err := repo.Update(c.Request.Context(), id, UpdateInput(p))
 		switch {
 		case errors.Is(err, ErrSlugConflict):
 			apphttp.Err(c, http.StatusConflict, "CONFLICT", "slug already exists")

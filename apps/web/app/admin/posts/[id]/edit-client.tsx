@@ -43,7 +43,7 @@ export function EditPostClient({ id }: { id: string }) {
         : error instanceof Error
           ? error.message
           : 'Failed to load post';
-    return <p className="text-sm text-red-600">{message}</p>;
+    return <p className="text-sm text-destructive">{message}</p>;
   }
 
   if (!data) return null;

@@ -37,7 +37,7 @@ func TestValidSlug(t *testing.T) {
 	assert.True(t, validSlug("hello"))
 	assert.True(t, validSlug("hello-world-2"))
 	assert.False(t, validSlug(""))
-	assert.False(t, validSlug("Hello"))      // uppercase
+	assert.False(t, validSlug("Hello"))       // uppercase
 	assert.False(t, validSlug("hello world")) // space
 	assert.False(t, validSlug("-leading"))
 	assert.False(t, validSlug("trailing-"))

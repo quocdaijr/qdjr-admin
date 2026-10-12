@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Skipped unless TEST_DATABASE_URL points at a running Postgres (use the local Supabase stack).
+// Skipped unless TEST_DATABASE_URL points at a running Postgres (docker compose up -d db).
 func TestNewPool_PingsDatabase(t *testing.T) {
 	dsn := os.Getenv("TEST_DATABASE_URL")
 	if dsn == "" {

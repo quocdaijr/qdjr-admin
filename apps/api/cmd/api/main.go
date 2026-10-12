@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"golang.org/x/time/rate"
 
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/adminapi"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/auth"
@@ -21,9 +22,11 @@ import (
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/db"
 	apphttp "github.com/quocdaijr/qdjr-admin/apps/api/internal/http"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/media"
+	"github.com/quocdaijr/qdjr-admin/apps/api/internal/migrate"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/posts"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/profile"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/rbac"
+	"github.com/quocdaijr/qdjr-admin/apps/api/internal/session"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/sitesettings"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/tags"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/users"
@@ -59,28 +62,28 @@ func run() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	if cfg.RunMigrations {
+		if err := db.Retry(ctx, 5, time.Second, func(ctx context.Context) error {
+			return migrate.Up(ctx, cfg.MigrationsDatabaseURL)
+		}); err != nil {
+			return fmt.Errorf("migrate: %w", err)
+		}
+		log.Info("migrations applied")
+	}
+
 	pool, err := db.NewPool(ctx, cfg.DatabaseURL)
 	if err != nil {
 		return fmt.Errorf("db: %w", err)
 	}
 	defer pool.Close()
 
-	var verifier auth.Verifier
-	switch {
-	case cfg.SupabaseJWKSURL != "":
-		verifier, err = auth.NewJWKSVerifier(cfg.SupabaseJWKSURL)
-		if err != nil {
-			return fmt.Errorf("jwks: %w", err)
-		}
-	default:
-		verifier = auth.NewHS256Verifier([]byte(cfg.SupabaseJWTSecret))
-	}
+	issuer := auth.NewIssuer([]byte(cfg.JWTSecret), cfg.AccessTTL, cfg.RefreshTTL)
 
 	resolver := rbac.NewStatic(rbac.NewPGStore(pool))
 
-	// Public posts API: prefix media storage paths with the Supabase public
-	// storage URL so the FE can render thumbnails directly.
-	storagePrefix := cfg.SupabaseURL + "/storage/v1/object/public/"
+	// Media keys ("media/<uuid>.png") become public URLs under
+	// MEDIA_PUBLIC_BASE_URL (R2 r2.dev / custom domain, or the local folder).
+	storagePrefix := cfg.MediaPublicBaseURL + "/"
 	postsRepo := posts.NewRepository(pool, storagePrefix)
 	postsAdminRepo := posts.NewAdminRepository(pool)
 	categoriesRepo := categories.NewRepository(pool)
@@ -95,24 +98,38 @@ func run() error {
 	contactAdminRepo := contact.NewAdminRepository(pool)
 	contactLimiter := contact.NewLimiter()
 	mediaAdminRepo := media.NewAdminRepository(pool, storagePrefix)
-	mediaStorage := media.NewStorageClient(cfg.SupabaseURL, cfg.SupabaseServiceRoleKey, "media")
+	var mediaStorage media.Storage
+	localMediaDir := ""
+	if cfg.R2Configured() {
+		mediaStorage = media.NewR2(cfg.R2AccountID, cfg.R2AccessKeyID, cfg.R2SecretAccessKey, cfg.R2Bucket)
+		log.Info("media storage: r2", "bucket", cfg.R2Bucket)
+	} else {
+		mediaStorage = media.NewLocalStorage(cfg.MediaDir)
+		localMediaDir = cfg.MediaDir
+		log.Info("media storage: local folder (development only)", "dir", cfg.MediaDir)
+	}
 	usersRepo := users.NewAdminRepository(pool)
-	usersSupa := users.NewSupabaseAdminClient(cfg.SupabaseURL, cfg.SupabaseServiceRoleKey)
-	if err := mediaStorage.EnsureBucket(ctx); err != nil {
-		log.Warn("media bucket ensure failed (continuing)", "err", err)
+	accounts := users.NewPGAccounts(pool)
+	loginLimiter := contact.NewLimiterWith(rate.Every(6*time.Second), 10) // ~10/min per IP
+	if created, err := users.SeedAdmin(ctx, accounts, usersRepo, cfg.BootstrapAdminEmail, cfg.BootstrapAdminPassword); err != nil {
+		return fmt.Errorf("seed admin: %w", err)
+	} else if created {
+		log.Info("bootstrap admin created", "email", cfg.BootstrapAdminEmail)
 	}
 	// Background eviction lives with the process; pass context.Background()
 	// because RegisterPublic doesn't get the run-loop context.
 	go contactLimiter.StartEvictor(context.Background())
+	go loginLimiter.StartEvictor(context.Background())
 
 	if cfg.Env == "production" {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
 	r := apphttp.NewRouter(apphttp.RouterDeps{
-		Pool:        pool,
-		CORSOrigins: cfg.CORSOrigins,
-		Verifier:    verifier,
+		Pool:          pool,
+		CORSOrigins:   cfg.CORSOrigins,
+		LocalMediaDir: localMediaDir,
+		Verifier:      issuer,
 		RegisterAdmin: func(g *gin.RouterGroup) {
 			adminapi.Register(g, adminapi.Deps{
 				Resolver:        resolver,
@@ -125,7 +142,7 @@ func run() error {
 				MediaAdmin:      mediaAdminRepo,
 				MediaStorage:    mediaStorage,
 				UsersAdmin:      usersRepo,
-				UsersSupabase:   usersSupa,
+				UsersAccounts:   accounts,
 			})
 		},
 		RegisterPublic: func(g *gin.RouterGroup) {
@@ -135,6 +152,7 @@ func run() error {
 			profile.RegisterPublic(g, profileRepo)
 			sitesettings.RegisterPublic(g, siteRepo)
 			contact.RegisterPublic(g, contactRepo, contactLimiter)
+			session.RegisterPublic(g, accounts, issuer, loginLimiter)
 		},
 	})
 

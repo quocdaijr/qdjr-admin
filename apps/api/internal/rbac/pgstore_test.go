@@ -21,17 +21,20 @@ func TestPGStore_RoleForUser(t *testing.T) {
 	defer cancel()
 	pool, err := pgxpool.New(ctx, dsn)
 	require.NoError(t, err)
-	defer pool.Close()
+	// t.Cleanup (not defer): cleanups run LIFO after the test, so the row
+	// delete below runs before the pool closes. With defer the pool closed
+	// first and every run leaked a user.
+	t.Cleanup(pool.Close)
 
-	// Insert a fake auth.users row; in real life Supabase Auth owns this.
+	// Insert a fake public.users row.
 	// Use a per-run unique email so reruns don't collide on users_email_partial_key.
 	uid := uuid.New()
 	email := "store-test+" + uid.String() + "@example.com"
 	_, err = pool.Exec(ctx,
-		`insert into auth.users (id, email, created_at) values ($1, $2, now())`,
+		`insert into public.users (id, email, password_hash, created_at) values ($1, $2, 'test-hash', now())`,
 		uid, email)
 	require.NoError(t, err)
-	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), `delete from auth.users where id = $1`, uid) })
+	t.Cleanup(func() { _, _ = pool.Exec(context.Background(), `delete from public.users where id = $1`, uid) })
 
 	_, err = pool.Exec(ctx,
 		`insert into public.user_roles (user_id, role_id)

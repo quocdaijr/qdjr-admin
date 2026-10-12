@@ -268,10 +268,10 @@ func (r *AdminRepository) Update(ctx context.Context, id uuid.UUID, in UpdateInp
 
 	// Pivot replacement (only when caller explicitly passed the slice).
 	var (
-		cats     []uuid.UUID
-		tags     []uuid.UUID
-		repCats  bool
-		repTags  bool
+		cats    []uuid.UUID
+		tags    []uuid.UUID
+		repCats bool
+		repTags bool
 	)
 	if in.CategoryIDs != nil {
 		cats = *in.CategoryIDs
@@ -383,12 +383,12 @@ func replacePivots(ctx context.Context, tx pgx.Tx, postID uuid.UUID, cats, tags 
 // scanAdminPost decodes one admin row.
 func scanAdminPost(row rowScanner) (AdminPost, error) {
 	var (
-		p          AdminPost
-		excerpt    *string
-		mTitle     *string
-		mDesc      *string
-		catsJSON   []byte
-		tagsJSON   []byte
+		p        AdminPost
+		excerpt  *string
+		mTitle   *string
+		mDesc    *string
+		catsJSON []byte
+		tagsJSON []byte
 	)
 	if err := row.Scan(
 		&p.ID, &p.Slug, &p.Title, &excerpt, &p.Content, &p.Status,

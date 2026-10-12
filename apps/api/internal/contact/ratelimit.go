@@ -13,7 +13,7 @@ import (
 const (
 	limiterRate     = rate.Limit(float64(5) / float64(time.Hour/time.Second)) // 5/hr in 1/sec terms
 	limiterBurst    = 5
-	limiterIdleTTL  = time.Hour       // entry untouched this long → evictable
+	limiterIdleTTL  = time.Hour        // entry untouched this long → evictable
 	limiterEvictGap = 10 * time.Minute // sweep interval
 )
 
@@ -32,13 +32,22 @@ type Limiter struct {
 	mu      sync.Mutex
 	entries map[string]*limiterEntry
 	now     func() time.Time // injectable clock for tests
+	limit   rate.Limit
+	burst   int
 }
 
 // NewLimiter returns a Limiter with default 5/hour budget per IP.
 func NewLimiter() *Limiter {
+	return NewLimiterWith(limiterRate, limiterBurst)
+}
+
+// NewLimiterWith returns a Limiter with a custom per-IP budget (used by login).
+func NewLimiterWith(limit rate.Limit, burst int) *Limiter {
 	return &Limiter{
 		entries: make(map[string]*limiterEntry),
 		now:     time.Now,
+		limit:   limit,
+		burst:   burst,
 	}
 }
 
@@ -51,7 +60,7 @@ func (l *Limiter) Allow(ip string) bool {
 	e, ok := l.entries[ip]
 	if !ok {
 		e = &limiterEntry{
-			limiter: rate.NewLimiter(limiterRate, limiterBurst),
+			limiter: rate.NewLimiter(l.limit, l.burst),
 		}
 		l.entries[ip] = e
 	}

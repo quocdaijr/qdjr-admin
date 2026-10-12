@@ -5,16 +5,11 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Upload, X } from 'lucide-react';
 import { toast } from 'sonner';
 
-import { apiPost, ApiError } from '@/lib/api';
-import type { Media } from '@/lib/types';
+import { ApiError } from '@/lib/api';
+import { getAccessToken } from '@/lib/auth';
 import { formatBytes } from '@/lib/format';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-
-interface SignedUrlResponse {
-  storage_path: string;
-  signed_url: string;
-}
 
 type UploadStatus = 'pending' | 'uploading' | 'success' | 'error';
 
@@ -42,44 +37,37 @@ export function UploadDropzone() {
       try {
         updateItem(id, { status: 'uploading', progress: 0 });
 
-        // 1. Get signed URL
-        const signed = await apiPost<SignedUrlResponse>(
-          '/v1/admin/media/signed-url',
-          {
-            filename: file.name,
-            mime_type: file.type || 'application/octet-stream',
-            size: file.size,
-          }
-        );
-
-        // 2. Upload via XHR for progress
+        // One multipart request: the API sniffs the type, stores the file and
+        // records it. XHR (not fetch) so the bar can show upload progress.
+        const token = await getAccessToken();
+        if (!token) throw new Error('Session expired, sign in again');
         await new Promise<void>((resolve, reject) => {
+          const form = new FormData();
+          form.append('file', file);
           const xhr = new XMLHttpRequest();
-          xhr.open('PUT', signed.signed_url);
-          xhr.setRequestHeader(
-            'Content-Type',
-            file.type || 'application/octet-stream'
-          );
+          xhr.open('POST', `${process.env.NEXT_PUBLIC_API_URL}/v1/admin/media`);
+          xhr.setRequestHeader('Authorization', `Bearer ${token}`);
           xhr.upload.onprogress = (e) => {
             if (e.lengthComputable) {
-              const pct = Math.round((e.loaded / e.total) * 100);
-              updateItem(id, { progress: pct });
+              updateItem(id, { progress: Math.round((e.loaded / e.total) * 100) });
             }
           };
           xhr.onload = () => {
-            if (xhr.status >= 200 && xhr.status < 300) resolve();
-            else reject(new Error(`Upload failed (${xhr.status})`));
+            if (xhr.status >= 200 && xhr.status < 300) {
+              resolve();
+              return;
+            }
+            let message = `Upload failed (${xhr.status})`;
+            try {
+              const body = JSON.parse(xhr.responseText) as { error?: { message?: string } };
+              message = body.error?.message ?? message;
+            } catch {
+              // non-JSON error body: keep the status message
+            }
+            reject(new Error(message));
           };
           xhr.onerror = () => reject(new Error('Network error during upload'));
-          xhr.send(file);
-        });
-
-        // 3. Register media record
-        await apiPost<Media>('/v1/admin/media', {
-          filename: file.name,
-          storage_path: signed.storage_path,
-          mime_type: file.type || 'application/octet-stream',
-          size: file.size,
+          xhr.send(form);
         });
 
         updateItem(id, { status: 'success', progress: 100 });
@@ -159,6 +147,7 @@ export function UploadDropzone() {
         <input
           ref={inputRef}
           type="file"
+          accept="image/png,image/jpeg,image/webp,image/gif"
           multiple
           className="hidden"
           onChange={onPick}

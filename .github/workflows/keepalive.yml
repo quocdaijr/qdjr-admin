@@ -1,0 +1,17 @@
+name: keepalive
+
+# Render free web services sleep after 15 idle minutes (≈30 s cold start on
+# every SSR page of qdjr.dev). A ping every 10 min keeps the API warm; one
+# always-on free service fits the 750 instance-hours/month allowance.
+# GitHub disables scheduled workflows after 60 days without repo activity —
+# re-enable from the Actions tab if the API starts cold-starting again.
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - run: curl --fail --silent --max-time 60 https://api.qdjr.dev/healthz

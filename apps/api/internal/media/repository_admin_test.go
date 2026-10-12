@@ -35,14 +35,14 @@ func newMediaFixture(t *testing.T) *mediaFixture {
 
 	authorID := uuid.New()
 	_, err = pool.Exec(ctx,
-		`insert into auth.users (id, email) values ($1, $2)`,
+		`insert into public.users (id, email, password_hash) values ($1, $2, 'test-hash')`,
 		authorID, fmt.Sprintf("media-test-%s@example.com", authorID))
 	require.NoError(t, err)
 
 	t.Cleanup(func() {
 		bg := context.Background()
 		_, _ = pool.Exec(bg, `delete from public.media where uploaded_by = $1`, authorID)
-		_, _ = pool.Exec(bg, `delete from auth.users where id = $1`, authorID)
+		_, _ = pool.Exec(bg, `delete from public.users where id = $1`, authorID)
 	})
 	return &mediaFixture{t: t, pool: pool, ctx: ctx, authorID: authorID}
 }

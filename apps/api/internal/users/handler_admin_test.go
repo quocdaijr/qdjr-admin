@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -139,43 +138,41 @@ func (s *stubRepo) DeleteRole(_ context.Context, id uuid.UUID) error {
 	return nil
 }
 
-// stubSupa is an in-memory SupabaseAdmin double.
-type stubSupa struct {
-	ensureCalls []struct {
+// stubAccounts is an in-memory Accounts double.
+type stubAccounts struct {
+	createCalls []struct {
 		email    string
 		password string
 	}
-	deleteCalls   []uuid.UUID
-	ensureResp    map[string]uuid.UUID
-	ensureErr     error
-	deleteErr     error
-	requireCreate bool // if true, EnsureUser errors when password == ""
+	deleteCalls []uuid.UUID
+	taken       map[string]bool
+	createErr   error
+	deleteErr   error
 }
 
-func newStubSupa() *stubSupa {
-	return &stubSupa{ensureResp: map[string]uuid.UUID{}}
+func newStubAccounts() *stubAccounts {
+	return &stubAccounts{taken: map[string]bool{}}
 }
 
-func (s *stubSupa) EnsureUser(_ context.Context, email, password string) (uuid.UUID, error) {
-	s.ensureCalls = append(s.ensureCalls, struct {
+func (s *stubAccounts) Create(_ context.Context, email, password string) (uuid.UUID, error) {
+	s.createCalls = append(s.createCalls, struct {
 		email    string
 		password string
 	}{email, password})
-	if s.ensureErr != nil {
-		return uuid.Nil, s.ensureErr
+	if s.createErr != nil {
+		return uuid.Nil, s.createErr
 	}
-	if id, ok := s.ensureResp[email]; ok {
-		return id, nil
+	if s.taken[email] {
+		return uuid.Nil, ErrEmailTaken
 	}
-	if password == "" && s.requireCreate {
-		return uuid.Nil, errors.New("password required")
+	if err := auth.ValidatePassword(password); err != nil {
+		return uuid.Nil, err
 	}
-	id := uuid.New()
-	s.ensureResp[email] = id
-	return id, nil
+	s.taken[email] = true
+	return uuid.New(), nil
 }
 
-func (s *stubSupa) DeleteUser(_ context.Context, id uuid.UUID) error {
+func (s *stubAccounts) Delete(_ context.Context, id uuid.UUID) error {
 	s.deleteCalls = append(s.deleteCalls, id)
 	return s.deleteErr
 }
@@ -183,20 +180,20 @@ func (s *stubSupa) DeleteUser(_ context.Context, id uuid.UUID) error {
 type usersEnv struct {
 	router *gin.Engine
 	repo   *stubRepo
-	supa   *stubSupa
+	acc    *stubAccounts
 	res    *resolverStub
 }
 
 func newUsersEnv(perms ...string) *usersEnv {
 	gin.SetMode(gin.TestMode)
 	repo := newStubRepo()
-	supa := newStubSupa()
+	acc := newStubAccounts()
 	res := newResolverStub(perms...)
 	v := auth.NewHS256Verifier([]byte(usersTestSecret))
 	r := gin.New()
 	g := r.Group("/v1/admin", apphttp.RequireAuth(v))
-	RegisterAdmin(g, repo, supa, res)
-	return &usersEnv{router: r, repo: repo, supa: supa, res: res}
+	RegisterAdmin(g, repo, acc, res)
+	return &usersEnv{router: r, repo: repo, acc: acc, res: res}
 }
 
 func (e *usersEnv) do(t *testing.T, uid uuid.UUID, method, path string, body any) *httptest.ResponseRecorder {
@@ -253,9 +250,9 @@ func TestAdminUsers_Invite_NewUser_Created(t *testing.T) {
 		"password": "S3cret-Pass!",
 	})
 	require.Equal(t, http.StatusCreated, rr.Code)
-	require.Len(t, env.supa.ensureCalls, 1)
-	assert.Equal(t, "new@example.com", env.supa.ensureCalls[0].email)
-	assert.Equal(t, "S3cret-Pass!", env.supa.ensureCalls[0].password)
+	require.Len(t, env.acc.createCalls, 1)
+	assert.Equal(t, "new@example.com", env.acc.createCalls[0].email)
+	assert.Equal(t, "S3cret-Pass!", env.acc.createCalls[0].password)
 	require.Len(t, env.repo.setRoleCalls, 1)
 	assert.Equal(t, "editor", env.repo.setRoleCalls[0].role)
 
@@ -267,21 +264,31 @@ func TestAdminUsers_Invite_NewUser_Created(t *testing.T) {
 	assert.Equal(t, "editor", *body.Data.Role)
 }
 
-func TestAdminUsers_Invite_ExistingUser_NoPassword_OnlySetRole(t *testing.T) {
+func TestAdminUsers_Invite_ExistingEmail_Conflict(t *testing.T) {
 	env := newUsersEnv("users:manage")
-	existing := uuid.New()
-	env.supa.ensureResp["existing@example.com"] = existing
+	env.acc.taken["existing@example.com"] = true
 
 	rr := env.do(t, uuid.New(), http.MethodPost, "/v1/admin/users", map[string]any{
-		"email": "existing@example.com",
-		"role":  "author",
+		"email":    "existing@example.com",
+		"role":     "author",
+		"password": "a-long-password",
 	})
-	require.Equal(t, http.StatusCreated, rr.Code)
-	require.Len(t, env.supa.ensureCalls, 1)
-	assert.Equal(t, "", env.supa.ensureCalls[0].password)
-	require.Len(t, env.repo.setRoleCalls, 1)
-	assert.Equal(t, existing, env.repo.setRoleCalls[0].id)
-	assert.Equal(t, "author", env.repo.setRoleCalls[0].role)
+	assert.Equal(t, http.StatusConflict, rr.Code)
+	assert.Contains(t, rr.Body.String(), "EMAIL_TAKEN")
+	assert.Empty(t, env.repo.setRoleCalls, "no role is assigned to someone else's account")
+}
+
+func TestAdminUsers_Invite_MissingOrWeakPassword(t *testing.T) {
+	for _, pw := range []string{"", "short"} {
+		env := newUsersEnv("users:manage")
+		rr := env.do(t, uuid.New(), http.MethodPost, "/v1/admin/users", map[string]any{
+			"email":    "new@example.com",
+			"role":     "editor",
+			"password": pw,
+		})
+		assert.Equal(t, http.StatusBadRequest, rr.Code, pw)
+		assert.Empty(t, env.repo.setRoleCalls, pw)
+	}
 }
 
 func TestAdminUsers_Invite_MissingEmail(t *testing.T) {
@@ -353,7 +360,7 @@ func TestAdminUsers_Delete_Self_LastSuperAdmin_Conflict(t *testing.T) {
 
 	rr := env.do(t, caller, http.MethodDelete, "/v1/admin/users/"+caller.String(), nil)
 	require.Equal(t, http.StatusConflict, rr.Code)
-	assert.Empty(t, env.supa.deleteCalls, "must not call Supabase delete when blocked")
+	assert.Empty(t, env.acc.deleteCalls, "must not delete the account when blocked")
 }
 
 func TestAdminUsers_Delete_OtherUser_NoContent(t *testing.T) {
@@ -364,8 +371,8 @@ func TestAdminUsers_Delete_OtherUser_NoContent(t *testing.T) {
 
 	rr := env.do(t, caller, http.MethodDelete, "/v1/admin/users/"+target.String(), nil)
 	require.Equal(t, http.StatusNoContent, rr.Code)
-	require.Len(t, env.supa.deleteCalls, 1)
-	assert.Equal(t, target, env.supa.deleteCalls[0])
+	require.Len(t, env.acc.deleteCalls, 1)
+	assert.Equal(t, target, env.acc.deleteCalls[0])
 }
 
 func TestAdminUsers_Forbidden_WithoutPermission(t *testing.T) {

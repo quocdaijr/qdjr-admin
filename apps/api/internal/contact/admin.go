@@ -12,7 +12,7 @@ import (
 var ErrNotFound = errors.New("contact: not found")
 
 // ValidStatuses lists the allowed values of public.contact_status. Mirrors the
-// enum declared in supabase/migrations/0001_init_enums.sql.
+// enum declared in apps/api/migrations/0001_init_enums.sql.
 var ValidStatuses = []string{"new", "read", "replied", "spam"}
 
 // IsValidStatus reports whether s is one of the enum values.

@@ -2,6 +2,7 @@ package profile
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -34,6 +35,22 @@ type adminUpdatePayload struct {
 	SocialLinks *map[string]string `json:"social_links,omitempty"`
 	Location    *string            `json:"location,omitempty"`
 	Email       *string            `json:"email,omitempty"`
+	Content     json.RawMessage    `json:"content,omitempty"`
+}
+
+// parseContent accepts an absent key (nil, nil) or a JSON object. null,
+// arrays and scalars are rejected so the DB check constraint is never the
+// first thing to complain.
+func parseContent(raw json.RawMessage) (*json.RawMessage, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &m); err != nil || m == nil {
+		return nil, errors.New("content must be a JSON object")
+	}
+	out := append(json.RawMessage(nil), raw...)
+	return &out, nil
 }
 
 // parseAvatarID inspects the raw JSON for avatar_id. Returns:
@@ -87,6 +104,11 @@ func adminUpdateHandler(repo AdminWriter) gin.HandlerFunc {
 			apphttp.Err(c, http.StatusBadRequest, "INVALID", "invalid avatar_id: "+err.Error())
 			return
 		}
+		content, err := parseContent(p.Content)
+		if err != nil {
+			apphttp.Err(c, http.StatusBadRequest, "INVALID", err.Error())
+			return
+		}
 		in := UpdateInput{
 			FullName:    p.FullName,
 			Bio:         p.Bio,
@@ -94,6 +116,7 @@ func adminUpdateHandler(repo AdminWriter) gin.HandlerFunc {
 			SocialLinks: p.SocialLinks,
 			Location:    p.Location,
 			Email:       p.Email,
+			Content:     content,
 			UpdatedBy:   uid,
 		}
 		if avatarSet {
