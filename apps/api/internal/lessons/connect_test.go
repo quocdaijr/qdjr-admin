@@ -39,6 +39,7 @@ func (r *resolverStub) Can(_ context.Context, _ uuid.UUID, p string) (bool, erro
 
 // stubRepo is an in-memory AdminWriter that records the last inputs.
 type stubRepo struct {
+	panicOnList    bool
 	courses        map[uuid.UUID]Course
 	lessons        map[uuid.UUID]Lesson
 	listFilt       ListFilter
@@ -51,6 +52,9 @@ func newStubRepo() *stubRepo {
 }
 
 func (s *stubRepo) ListCourses(_ context.Context, f ListFilter) ([]Course, int, error) {
+	if s.panicOnList {
+		panic("boom")
+	}
 	s.listFilt = f
 	out := make([]Course, 0, len(s.courses))
 	for _, c := range s.courses {
@@ -166,10 +170,7 @@ func newEnv(t *testing.T, perms ...string) *env {
 	}
 	v := auth.NewHS256Verifier([]byte(testSecret))
 	mux := http.NewServeMux()
-	path, h := lessonsv1connect.NewLessonsServiceHandler(
-		NewHandler(repo),
-		connect.WithInterceptors(apphttp.RPCAuth(v, res, "lessons:write")),
-	)
+	path, h := NewConnectHandler(repo, apphttp.RPCAuth(v, res, "lessons:write"))
 	mux.Handle(path, apphttp.ConnectCORS(nil)(h))
 
 	srv := httptest.NewUnstartedServer(mux)
@@ -310,4 +311,23 @@ func TestRPC_NativeGRPC_OverH2C(t *testing.T) {
 	res, err := c.ListCourses(context.Background(), connect.NewRequest(&lessonsv1.ListCoursesRequest{}))
 	require.NoError(t, err)
 	assert.Equal(t, int32(0), res.Msg.GetTotal())
+}
+
+// TestRPC_OversizedBody_ResourceExhausted: the body is read before the auth
+// interceptor runs, so the cap is what stops an anonymous caller from making
+// the free instance buffer an arbitrary upload.
+func TestRPC_OversizedBody_ResourceExhausted(t *testing.T) {
+	e := newEnv(t, "lessons:write")
+	huge := strings.Repeat("x", maxRequestBytes+1)
+	_, err := e.client(t, uuid.New()).CreateCourse(context.Background(), connect.NewRequest(&lessonsv1.CreateCourseRequest{Title: "big", Notes: huge}))
+	assert.Equal(t, connect.CodeResourceExhausted, connect.CodeOf(err))
+}
+
+// TestRPC_HandlerPanic_Internal: a panic must surface as CodeInternal, not a
+// dropped connection (Gin's Recovery does not wrap the Connect mount).
+func TestRPC_HandlerPanic_Internal(t *testing.T) {
+	e := newEnv(t, "lessons:write")
+	e.repo.panicOnList = true
+	_, err := e.client(t, uuid.New()).ListCourses(context.Background(), connect.NewRequest(&lessonsv1.ListCoursesRequest{}))
+	assert.Equal(t, connect.CodeInternal, connect.CodeOf(err))
 }

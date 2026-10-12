@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 	"unicode/utf8"
 
@@ -17,6 +18,11 @@ import (
 
 const maxTitleRunes = 200
 
+// maxRequestBytes caps a Connect request body after decompression. connect-go
+// v1 reads the body before interceptors run, so this is what stops an
+// anonymous caller from making the server buffer an arbitrary upload.
+const maxRequestBytes = 1 << 20
+
 // Handler implements lessonsv1connect.LessonsServiceHandler on top of an
 // AdminWriter. Auth and permission are enforced by the RPCAuth interceptor
 // registered in cmd/api/main.go, so every method can assume a caller.
@@ -29,6 +35,21 @@ var _ lessonsv1connect.LessonsServiceHandler = (*Handler)(nil)
 
 // NewHandler constructs a Handler.
 func NewHandler(repo AdminWriter) *Handler { return &Handler{repo: repo} }
+
+// NewConnectHandler returns the mount path and http.Handler for the service
+// with the options every deployment needs: the given interceptors (auth), a
+// request-size cap and panic recovery. main.go and the tests share it so the
+// tested handler is the served one.
+func NewConnectHandler(repo AdminWriter, interceptors ...connect.Interceptor) (string, http.Handler) {
+	return lessonsv1connect.NewLessonsServiceHandler(
+		NewHandler(repo),
+		connect.WithInterceptors(interceptors...),
+		connect.WithReadMaxBytes(maxRequestBytes),
+		connect.WithRecover(func(_ context.Context, _ connect.Spec, _ http.Header, p any) error {
+			return connect.NewError(connect.CodeInternal, fmt.Errorf("lessons: panic: %v", p))
+		}),
+	)
+}
 
 // ListCourses returns a page of courses with derived progress.
 func (h *Handler) ListCourses(ctx context.Context, req *connect.Request[lessonsv1.ListCoursesRequest]) (*connect.Response[lessonsv1.ListCoursesResponse], error) {

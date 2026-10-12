@@ -11,7 +11,6 @@ import (
 	"syscall"
 	"time"
 
-	"connectrpc.com/connect"
 	"github.com/gin-gonic/gin"
 	"golang.org/x/time/rate"
 
@@ -21,7 +20,6 @@ import (
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/config"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/contact"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/db"
-	"github.com/quocdaijr/qdjr-admin/apps/api/internal/gen/lessons/v1/lessonsv1connect"
 	apphttp "github.com/quocdaijr/qdjr-admin/apps/api/internal/http"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/lessons"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/media"
@@ -165,10 +163,7 @@ func run() error {
 	// so Gin's CORS and routes are untouched. Auth lives in the RPCAuth
 	// interceptor so gRPC and gRPC-Web callers get proper status codes.
 	mux := http.NewServeMux()
-	lessonsPath, lessonsHandler := lessonsv1connect.NewLessonsServiceHandler(
-		lessons.NewHandler(lessonsRepo),
-		connect.WithInterceptors(apphttp.RPCAuth(issuer, resolver, "lessons:write")),
-	)
+	lessonsPath, lessonsHandler := lessons.NewConnectHandler(lessonsRepo, apphttp.RPCAuth(issuer, resolver, "lessons:write"))
 	mux.Handle(lessonsPath, apphttp.ConnectCORS(cfg.CORSOrigins)(lessonsHandler))
 	mux.Handle("/", r)
 
