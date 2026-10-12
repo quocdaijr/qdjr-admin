@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 
+	"github.com/quocdaijr/qdjr-admin/apps/api/internal/auth"
 	apphttp "github.com/quocdaijr/qdjr-admin/apps/api/internal/http"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/rbac"
 )
@@ -23,14 +24,14 @@ const (
 // RegisterAdmin mounts the admin user-management endpoints on group g (which
 // already has RequireAuth applied). All routes require the users:manage
 // permission.
-func RegisterAdmin(g *gin.RouterGroup, repo AdminWriter, supa SupabaseAdmin, res rbac.PermissionResolver) {
+func RegisterAdmin(g *gin.RouterGroup, repo AdminWriter, acc Accounts, res rbac.PermissionResolver) {
 	g.GET("/users",
 		apphttp.RequirePermission(res, "users:manage"),
 		adminListHandler(repo),
 	)
 	g.POST("/users",
 		apphttp.RequirePermission(res, "users:manage"),
-		adminInviteHandler(repo, supa),
+		adminInviteHandler(repo, acc),
 	)
 	g.PATCH("/users/:id/role",
 		apphttp.RequirePermission(res, "users:manage"),
@@ -38,14 +39,14 @@ func RegisterAdmin(g *gin.RouterGroup, repo AdminWriter, supa SupabaseAdmin, res
 	)
 	g.DELETE("/users/:id",
 		apphttp.RequirePermission(res, "users:manage"),
-		adminDeleteHandler(repo, supa),
+		adminDeleteHandler(repo, acc),
 	)
 }
 
 type adminInvitePayload struct {
 	Email    string `json:"email"`
 	Role     string `json:"role"`
-	Password string `json:"password,omitempty"`
+	Password string `json:"password"`
 }
 
 type adminRolePayload struct {
@@ -70,7 +71,7 @@ func adminListHandler(repo AdminWriter) gin.HandlerFunc {
 	}
 }
 
-func adminInviteHandler(repo AdminWriter, supa SupabaseAdmin) gin.HandlerFunc {
+func adminInviteHandler(repo AdminWriter, acc Accounts) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		var p adminInvitePayload
 		if err := c.ShouldBindJSON(&p); err != nil {
@@ -91,9 +92,21 @@ func adminInviteHandler(repo AdminWriter, supa SupabaseAdmin) gin.HandlerFunc {
 			return
 		}
 
-		uid, err := supa.EnsureUser(c.Request.Context(), email, p.Password)
-		if err != nil {
-			apphttp.Err(c, http.StatusBadGateway, "BAD_GATEWAY", err.Error())
+		if err := auth.ValidatePassword(p.Password); err != nil {
+			apphttp.Err(c, http.StatusBadRequest, "INVALID", err.Error())
+			return
+		}
+
+		uid, err := acc.Create(c.Request.Context(), email, p.Password)
+		switch {
+		case errors.Is(err, ErrEmailTaken):
+			apphttp.Err(c, http.StatusConflict, "EMAIL_TAKEN", "an account with this email already exists")
+			return
+		case errors.Is(err, ErrInvalidEmail), errors.Is(err, auth.ErrWeakPassword):
+			apphttp.Err(c, http.StatusBadRequest, "INVALID", err.Error())
+			return
+		case err != nil:
+			apphttp.Err(c, http.StatusInternalServerError, "INTERNAL", err.Error())
 			return
 		}
 
@@ -169,7 +182,7 @@ func adminSetRoleHandler(repo AdminWriter) gin.HandlerFunc {
 	}
 }
 
-func adminDeleteHandler(repo AdminWriter, supa SupabaseAdmin) gin.HandlerFunc {
+func adminDeleteHandler(repo AdminWriter, acc Accounts) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		id, err := uuid.Parse(c.Param("id"))
 		if err != nil {
@@ -196,12 +209,8 @@ func adminDeleteHandler(repo AdminWriter, supa SupabaseAdmin) gin.HandlerFunc {
 			}
 		}
 
-		if err := supa.DeleteUser(c.Request.Context(), id); err != nil {
-			apphttp.Err(c, http.StatusBadGateway, "BAD_GATEWAY", err.Error())
-			return
-		}
-		// FK cascades, but call DeleteRole defensively (no-op if absent).
-		if err := repo.DeleteRole(c.Request.Context(), id); err != nil {
+		// Deleting the account cascades to user_roles.
+		if err := acc.Delete(c.Request.Context(), id); err != nil {
 			apphttp.Err(c, http.StatusInternalServerError, "INTERNAL", err.Error())
 			return
 		}

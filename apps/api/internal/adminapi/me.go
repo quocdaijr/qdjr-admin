@@ -14,6 +14,7 @@ import (
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/posts"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/profile"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/rbac"
+	"github.com/quocdaijr/qdjr-admin/apps/api/internal/session"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/sitesettings"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/tags"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/users"
@@ -33,7 +34,7 @@ type Deps struct {
 	MediaAdmin      *media.AdminRepository
 	MediaStorage    *media.StorageClient
 	UsersAdmin      *users.AdminRepository
-	UsersSupabase   *users.SupabaseAdminClient
+	UsersAccounts   *users.PGAccounts
 }
 
 // Register attaches admin endpoints to the given group. Plan 2 wires per-
@@ -61,8 +62,9 @@ func Register(g *gin.RouterGroup, deps Deps) {
 	if deps.MediaAdmin != nil && deps.MediaStorage != nil {
 		media.RegisterAdmin(g, deps.MediaAdmin, deps.MediaStorage, deps.Resolver)
 	}
-	if deps.UsersAdmin != nil && deps.UsersSupabase != nil {
-		users.RegisterAdmin(g, deps.UsersAdmin, deps.UsersSupabase, deps.Resolver)
+	if deps.UsersAdmin != nil && deps.UsersAccounts != nil {
+		users.RegisterAdmin(g, deps.UsersAdmin, deps.UsersAccounts, deps.Resolver)
+		session.RegisterAdmin(g, deps.UsersAccounts)
 	}
 }
 

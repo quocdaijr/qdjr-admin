@@ -205,7 +205,7 @@ func TestClientIP_Headers(t *testing.T) {
 			}
 			req.RemoteAddr = tc.remote
 			c.Request = req
-			assert.Equal(t, tc.want, clientIP(c))
+			assert.Equal(t, tc.want, ClientIP(c))
 		})
 	}
 }

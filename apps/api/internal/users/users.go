@@ -60,9 +60,9 @@ type AdminWriter interface {
 	DeleteRole(ctx context.Context, userID uuid.UUID) error
 }
 
-// SupabaseAdmin is the contract for Supabase Auth Admin API operations the
-// handler depends on. Defined as an interface so handler tests can use a stub.
-type SupabaseAdmin interface {
-	EnsureUser(ctx context.Context, email, password string) (uuid.UUID, error)
-	DeleteUser(ctx context.Context, id uuid.UUID) error
+// Accounts creates and deletes login accounts (public.users). Implemented by
+// PGAccounts; an interface so handler tests can use a stub.
+type Accounts interface {
+	Create(ctx context.Context, email, password string) (uuid.UUID, error)
+	Delete(ctx context.Context, id uuid.UUID) error
 }
