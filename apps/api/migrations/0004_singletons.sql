@@ -9,7 +9,7 @@ create table public.profile (
     social_links  jsonb not null default '{}'::jsonb,
     location      text,
     email         text,
-    updated_by    uuid references auth.users(id) on delete set null,
+    updated_by    uuid references public.users(id) on delete set null,
     updated_at    timestamptz not null default now()
 );
 
@@ -20,6 +20,6 @@ create table public.site_settings (
     footer_text       text,
     contact_email     text,
     social_links      jsonb not null default '{}'::jsonb,
-    updated_by        uuid references auth.users(id) on delete set null,
+    updated_by        uuid references public.users(id) on delete set null,
     updated_at        timestamptz not null default now()
 );

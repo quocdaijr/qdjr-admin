@@ -11,7 +11,7 @@ import (
 )
 
 // AdminRepository provides admin list/get/role-mutation for users. It joins
-// auth.users with public.user_roles + public.roles.
+// public.users with public.user_roles + public.roles.
 type AdminRepository struct {
 	pool *pgxpool.Pool
 }
@@ -32,11 +32,11 @@ const adminSelectColumns = `
     ur.assigned_at`
 
 const adminFromClause = `
-    FROM auth.users u
+    FROM public.users u
     LEFT JOIN public.user_roles ur ON ur.user_id = u.id
     LEFT JOIN public.roles r ON r.id = ur.role_id`
 
-// List returns paginated user rows ordered by auth.users.created_at DESC.
+// List returns paginated user rows ordered by public.users.created_at DESC.
 func (r *AdminRepository) List(ctx context.Context, f ListFilter) ([]User, int, error) {
 	if f.Page < 1 {
 		f.Page = 1
@@ -69,7 +69,7 @@ func (r *AdminRepository) List(ctx context.Context, f ListFilter) ([]User, int, 
 	}
 
 	var total int
-	if err := r.pool.QueryRow(ctx, `SELECT count(*) FROM auth.users`).Scan(&total); err != nil {
+	if err := r.pool.QueryRow(ctx, `SELECT count(*) FROM public.users`).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("admin users count: %w", err)
 	}
 	return out, total, nil

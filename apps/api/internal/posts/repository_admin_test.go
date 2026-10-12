@@ -189,12 +189,12 @@ func TestAdminRepo_ListFilters(t *testing.T) {
 
 	otherAuthor := uuid.New()
 	_, err := f.pool.Exec(f.ctx,
-		`insert into auth.users (id, email) values ($1, $2)`,
+		`insert into public.users (id, email, password_hash) values ($1, $2, 'test-hash')`,
 		otherAuthor, "other-"+otherAuthor.String()+"@example.com")
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		_, _ = f.pool.Exec(f.ctx, `delete from public.posts where created_by = $1`, otherAuthor)
-		_, _ = f.pool.Exec(f.ctx, `delete from auth.users where id = $1`, otherAuthor)
+		_, _ = f.pool.Exec(f.ctx, `delete from public.users where id = $1`, otherAuthor)
 	})
 
 	// Author A: 1 draft, 1 published.

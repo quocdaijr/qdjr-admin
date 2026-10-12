@@ -9,7 +9,7 @@ create table public.media (
     width         int,
     height        int,
     alt_text      text,
-    uploaded_by   uuid references auth.users(id) on delete set null,
+    uploaded_by   uuid references public.users(id) on delete set null,
     created_at    timestamptz not null default now()
 );
 
@@ -25,8 +25,8 @@ create table public.posts (
     meta_title        text,
     meta_description  text,
     published_at      timestamptz,
-    created_by        uuid references auth.users(id) on delete set null,
-    updated_by        uuid references auth.users(id) on delete set null,
+    created_by        uuid references public.users(id) on delete set null,
+    updated_by        uuid references public.users(id) on delete set null,
     created_at        timestamptz not null default now(),
     updated_at        timestamptz not null default now()
 );

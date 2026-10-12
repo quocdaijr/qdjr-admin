@@ -165,7 +165,7 @@ func TestAdminRepo_Tags_DeleteBlockedByReferences(t *testing.T) {
 
 	authorID := uuid.New()
 	_, err = f.pool.Exec(f.ctx,
-		`insert into auth.users (id, email) values ($1, $2)`,
+		`insert into public.users (id, email, password_hash) values ($1, $2, 'test-hash')`,
 		authorID, fmt.Sprintf("tag-test-%s@example.com", authorID))
 	require.NoError(t, err)
 
@@ -182,7 +182,7 @@ func TestAdminRepo_Tags_DeleteBlockedByReferences(t *testing.T) {
 	t.Cleanup(func() {
 		bg := context.Background()
 		_, _ = f.pool.Exec(bg, `delete from public.posts where id = $1`, postID)
-		_, _ = f.pool.Exec(bg, `delete from auth.users where id = $1`, authorID)
+		_, _ = f.pool.Exec(bg, `delete from public.users where id = $1`, authorID)
 	})
 
 	err = repo.Delete(f.ctx, tag.ID)

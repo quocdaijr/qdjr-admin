@@ -15,7 +15,7 @@ import (
 
 // testFixture seeds a small published-post graph (post + category + tag +
 // thumbnail) and returns helpers to build extra posts. All inserted rows are
-// scoped to a unique auth.users row so t.Cleanup can wipe by author + media id
+// scoped to a unique public.users row so t.Cleanup can wipe by author + media id
 // without disturbing other tests.
 type testFixture struct {
 	t        *testing.T
@@ -44,7 +44,7 @@ func newFixture(t *testing.T) *testFixture {
 
 	authorID := uuid.New()
 	_, err = pool.Exec(ctx,
-		`insert into auth.users (id, email) values ($1, $2)`,
+		`insert into public.users (id, email, password_hash) values ($1, $2, 'test-hash')`,
 		authorID, fmt.Sprintf("posts-test-%s@example.com", authorID),
 	)
 	require.NoError(t, err)
@@ -79,12 +79,12 @@ func newFixture(t *testing.T) *testFixture {
 		// Wipe in dependency order. Posts cascade their pivots; categories
 		// and tags cascade pivots from their side. Media is referenced by
 		// posts.thumbnail_id ON DELETE SET NULL, so deleting posts first is
-		// fine. The author cascades back into auth.users children.
+		// fine. The author cascades back into public.users children.
 		_, _ = pool.Exec(bg, `delete from public.posts where created_by = $1`, authorID)
 		_, _ = pool.Exec(bg, `delete from public.media where id = $1`, mediaID)
 		_, _ = pool.Exec(bg, `delete from public.categories where id = $1`, catID)
 		_, _ = pool.Exec(bg, `delete from public.tags where id = $1`, tagID)
-		_, _ = pool.Exec(bg, `delete from auth.users where id = $1`, authorID)
+		_, _ = pool.Exec(bg, `delete from public.users where id = $1`, authorID)
 	})
 
 	return &testFixture{

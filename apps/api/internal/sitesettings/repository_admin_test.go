@@ -22,14 +22,14 @@ func newAdminFixture(t *testing.T) *adminFixture {
 
 	authorID := uuid.New()
 	_, err := f.pool.Exec(f.ctx,
-		`insert into auth.users (id, email) values ($1, $2)`,
+		`insert into public.users (id, email, password_hash) values ($1, $2, 'test-hash')`,
 		authorID, fmt.Sprintf("settings-test-%s@example.com", authorID),
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		bg := context.Background()
 		_, _ = f.pool.Exec(bg, `update public.site_settings set updated_by = null where id = 1`)
-		_, _ = f.pool.Exec(bg, `delete from auth.users where id = $1`, authorID)
+		_, _ = f.pool.Exec(bg, `delete from public.users where id = $1`, authorID)
 	})
 	return &adminFixture{fixture: f, authorID: authorID}
 }

@@ -61,7 +61,7 @@ func newFixture(t *testing.T) *fixture {
 
 	authorID := uuid.New()
 	_, err = pool.Exec(ctx,
-		`insert into auth.users (id, email) values ($1, $2)`,
+		`insert into public.users (id, email, password_hash) values ($1, $2, 'test-hash')`,
 		authorID, fmt.Sprintf("profile-test-%s@example.com", authorID),
 	)
 	require.NoError(t, err)
@@ -80,7 +80,7 @@ func newFixture(t *testing.T) *fixture {
 		// but explicit decoupling makes ordering obvious).
 		_, _ = pool.Exec(bg, `update public.profile set avatar_id = null where id = 1`)
 		_, _ = pool.Exec(bg, `delete from public.media where id = $1`, mediaID)
-		_, _ = pool.Exec(bg, `delete from auth.users where id = $1`, authorID)
+		_, _ = pool.Exec(bg, `delete from public.users where id = $1`, authorID)
 	})
 
 	return &fixture{t: t, pool: pool, ctx: ctx, authorID: authorID, mediaID: mediaID}

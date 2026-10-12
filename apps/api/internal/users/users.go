@@ -1,6 +1,6 @@
 // Package users provides admin user-management types and helpers.
 //
-// The admin endpoints under /v1/admin/users join auth.users with
+// The admin endpoints under /v1/admin/users join public.users with
 // public.user_roles → public.roles to expose a flat user-with-role shape.
 package users
 
@@ -33,7 +33,7 @@ func IsAllowedRole(role string) bool {
 	return false
 }
 
-// User is the admin response shape: a flattened auth.users + role row. Users
+// User is the admin response shape: a flattened public.users + role row. Users
 // without a row in user_roles have Role == nil and AssignedAt == nil.
 type User struct {
 	ID           uuid.UUID  `json:"id"`

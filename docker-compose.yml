@@ -1,0 +1,27 @@
+# Local development database. Production runs on Neon (see render.yaml);
+# this is a plain Postgres with the same major version so goose migrations and
+# the DB-backed tests behave the same.
+#
+#   docker compose up -d db
+#   DATABASE_URL=postgres://qdjr:qdjr@127.0.0.1:5432/qdjr?sslmode=disable
+services:
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: qdjr
+      POSTGRES_PASSWORD: qdjr
+      POSTGRES_DB: qdjr
+    ports:
+      - "${PG_PORT:-5432}:5432"
+    volumes:
+      # Postgres 18 keeps data in a major-version subdirectory, so mount one
+      # level above .../data (mounting .../data makes 18 refuse to start).
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U qdjr -d qdjr"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  pgdata:
