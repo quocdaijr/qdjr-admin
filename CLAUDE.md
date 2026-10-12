@@ -4,8 +4,8 @@ Admin dashboard backend (Go/Gin) and admin UI (Next.js) for qdjr.dev, on Neon Po
 
 ## Tech (pinned)
 
-- **API:** Go 1.26, Gin, `pgx/v5`, goose migrations embedded and applied at startup, deployed to Render (Docker, `render.yaml`, region singapore) at `api.qdjr.dev`
-- **Web:** Next.js 16.3 (App Router, pinned for OpenNext) + shadcn/ui + TanStack Query/Table + react-hook-form + zod, deployed to Cloudflare Workers via `@opennextjs/cloudflare` (`qdjr-admin.<account>.workers.dev`). Look is locked in `design.md` (Hallmark · Cobalt).
+- **API:** Go 1.27, Gin, `pgx/v5`, goose migrations embedded and applied at startup, deployed to Render (Docker, `render.yaml`, region singapore) at `api.qdjr.dev`
+- **Web:** Next.js 16.3 (App Router, pinned for OpenNext) + shadcn/ui + TanStack Query + react-hook-form + zod, deployed to Cloudflare Workers via `@opennextjs/cloudflare` (`qdjr-admin.<account>.workers.dev`). Look is locked in `design.md` (Hallmark · Cobalt).
 - **Site:** separate repo `quocdaijr/qdjr` (Nuxt 4, Netlify, `qdjr.dev`); reads posts/taxonomy/profile/settings from `/v1/*`. Keep the public API contract backward compatible.
 - **Data:** Neon Postgres (pooled `DATABASE_URL` for the app, direct `MIGRATIONS_DATABASE_URL` for goose); media in Cloudflare R2 (S3 API), public URLs built from `MEDIA_PUBLIC_BASE_URL`
 - **Auth:** the API's own HS256 JWTs (access 15 m / refresh 7 d) and bcrypt hashes in `public.users`; first super_admin seeded from `BOOTSTRAP_ADMIN_*` at start

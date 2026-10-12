@@ -15,7 +15,7 @@ A small, single-source-of-truth publishing stack that costs $0 on free tiers.
 ```
 ┌──────────────┐        ┌────────────────────┐        ┌────────────────┐
 │  qdjr site   │◄──────►│  apps/api          │◄──────►│   Neon         │
-│  Nuxt 4 SSR  │  REST  │  Go 1.26 + Gin     │  pgx   │   Postgres     │
+│  Nuxt 4 SSR  │  REST  │  Go 1.27 + Gin     │  pgx   │   Postgres     │
 │  Netlify     │        │  goose migrations  │        │   + Auth       │
 │  qdjr.dev    │        │  Render (Docker)   │        │   + Storage    │
 └──────────────┘        └────────────────────┘        └────────────────┘
@@ -33,8 +33,8 @@ A small, single-source-of-truth publishing stack that costs $0 on free tiers.
 
 | Layer | Stack |
 |---|---|
-| **API** | Go 1.26 · Gin · `pgx/v5` · `golang-jwt/v5` · `pressly/goose` (embedded migrations) · own HS256 JWT + bcrypt auth · aws-sdk-go-v2 (R2) · Render (Docker, singapore) |
-| **Web** | Next.js 16 (App Router · Turbopack) · React 19 · TypeScript · Tailwind 4 · shadcn/ui (base-ui) · TanStack Query/Table · react-hook-form + zod · Cloudflare Workers (`@opennextjs/cloudflare`) · design system in `design.md` |
+| **API** | Go 1.27 · Gin · `pgx/v5` · `golang-jwt/v5` · `pressly/goose` (embedded migrations) · own HS256 JWT + bcrypt auth · aws-sdk-go-v2 (R2) · Render (Docker, singapore) |
+| **Web** | Next.js 16 (App Router · Turbopack) · React 19 · TypeScript · Tailwind 4 · shadcn/ui (base-ui) · TanStack Query · react-hook-form + zod · Cloudflare Workers (`@opennextjs/cloudflare`) · design system in `design.md` |
 | **Site** | separate repo [`quocdaijr/qdjr`](https://github.com/quocdaijr/qdjr) (Nuxt 4, Netlify), reads `/v1/*` |
 | **Data** | Neon Postgres 18 (pooled + direct URLs) · Cloudflare R2 for media (S3 API) |
 | **CI/CD** | GitHub Actions (api / web / keepalive) · Render Blueprint · goose migrations applied by the API at startup |
@@ -134,7 +134,7 @@ GET   | POST         /v1/admin/users                 PATCH /v1/admin/users/:id/r
 
 ## Local development
 
-Prerequisites: Go 1.26+, Node 22+, pnpm 10+, Docker.
+Prerequisites: Go 1.27+, Node 24+, pnpm 12 (pinned in apps/web), Docker.
 
 ```bash
 # 1. Start local Postgres 18
