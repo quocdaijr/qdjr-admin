@@ -1,12 +1,12 @@
 # qdjr-admin
 
-Admin dashboard backend (Go/Gin), admin UI (Next.js) and public site (Nuxt) for qdjr.dev, on Neon Postgres and Cloudflare R2 (the pate-shop pattern). Replaces legacy `cmsqdjr` (Laravel). Single-source-of-truth design lives in `docs/superpowers/specs/2026-04-27-qdjr-admin-design.md`.
+Admin dashboard backend (Go/Gin) and admin UI (Next.js) for qdjr.dev, on Neon Postgres and Cloudflare R2 (the pate-shop pattern). Replaces legacy `cmsqdjr` (Laravel). Single-source-of-truth design lives in `docs/superpowers/specs/2026-04-27-qdjr-admin-design.md`.
 
 ## Tech (pinned)
 
 - **API:** Go 1.26, Gin, `pgx/v5`, goose migrations embedded and applied at startup, deployed to Render (Docker, `render.yaml`, region singapore) at `api.qdjr.dev`
 - **Web:** Next.js 16.3 (App Router, pinned for OpenNext) + shadcn/ui + TanStack Query/Table + react-hook-form + zod, deployed to Cloudflare Workers via `@opennextjs/cloudflare` (`qdjr-admin.<account>.workers.dev`). Look is locked in `design.md` (Hallmark · Cobalt).
-- **Site:** `apps/site`, Nuxt 4 public site for `qdjr.dev`, deployed by Netlify (`netlify.toml`); reads posts/taxonomy/profile/settings from the API
+- **Site:** separate repo `quocdaijr/qdjr` (Nuxt 4, Netlify, `qdjr.dev`); reads posts/taxonomy/profile/settings from `/v1/*`. Keep the public API contract backward compatible.
 - **Data:** Neon Postgres (pooled `DATABASE_URL` for the app, direct `MIGRATIONS_DATABASE_URL` for goose); media in Cloudflare R2 (S3 API), public URLs built from `MEDIA_PUBLIC_BASE_URL`
 - **Auth:** the API's own HS256 JWTs (access 15 m / refresh 7 d) and bcrypt hashes in `public.users`; first super_admin seeded from `BOOTSTRAP_ADMIN_*` at start
 - **Tooling:** goose for migrations, `docker-compose.yml` Postgres 18 for local dev and CI, GitHub Actions
@@ -17,7 +17,6 @@ Admin dashboard backend (Go/Gin), admin UI (Next.js) and public site (Nuxt) for 
 apps/api/              # Go backend
 apps/api/migrations/   # goose SQL — single source of truth for schema (embedded in the API)
 apps/web/              # Next.js admin UI
-apps/site/             # Nuxt 4 public site (qdjr.dev)
 design.md              # locked admin design system — read before any UI change
 docs/superpowers/      # specs + plans
 ```
@@ -40,7 +39,6 @@ docker compose up -d --wait db                                                 #
 cd apps/api && cp .env.example .env && env $(grep -v '^#' .env | xargs) go run ./cmd/migrate up   # goose migrations
 cd apps/api && go run ./cmd/api                                                # API on :8080
 cd apps/web && cp .env.example .env.local && pnpm dev                          # admin on :3000
-cd apps/site && cp .env.example .env && API_URL=http://localhost:8080 npm run dev -- -p 3001   # site on :3001
 ```
 
 ## See also
@@ -51,7 +49,7 @@ cd apps/site && cp .env.example .env && API_URL=http://localhost:8080 npm run de
 
 ## Deploy
 
-- `git push origin main` triggers: `api.yml` (test + lint; Render redeploys on its own from `render.yaml` and applies migrations at startup), `web.yml` (checks, then `wrangler deploy` to Cloudflare), `keepalive.yml` (10-min healthz ping so the free Render instance never sleeps). Netlify builds `apps/site` from its own Git integration.
-- Logs: Render dashboard → qdjr-admin-api → Logs; Cloudflare → Workers & Pages → qdjr-admin → Logs; Netlify → Deploys.
+- `git push origin main` triggers: `api.yml` (test + lint; Render redeploys on its own from `render.yaml` and applies migrations at startup), `web.yml` (checks, then `wrangler deploy` to Cloudflare), `keepalive.yml` (10-min healthz ping so the free Render instance never sleeps). The public site (`quocdaijr/qdjr`) deploys separately on Netlify.
+- Logs: Render dashboard → qdjr-admin-api → Logs; Cloudflare → Workers & Pages → qdjr-admin → Logs
 - Manual admin deploy: `cd apps/web && pnpm run deploy` (needs `wrangler login`).
 - See `infra/dns/README.md` for DNS and `docs/superpowers/setup/2026-10-12-deployment-checklist.md` for one-time platform setup.

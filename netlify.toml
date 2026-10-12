@@ -1,8 +1,0 @@
-# Netlify builds the public site from this monorepo. In the Netlify UI point the
-# existing qdjr.dev site at quocdaijr/qdjr-admin (branch main); base/command/
-# publish below take effect from there. Env: APP_URL=https://qdjr.dev,
-# API_URL=https://api.qdjr.dev.
-[build]
-  base = "apps/site"
-  command = "npm run build"
-  publish = "dist"

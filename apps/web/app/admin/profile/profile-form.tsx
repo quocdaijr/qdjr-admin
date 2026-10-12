@@ -184,7 +184,7 @@ export function ProfileForm() {
         />
         <p className="text-xs text-muted-foreground">
           Copy for qdjr.dev / and /about, one object per language: {'{ "vi": {…}, "en": {…} }'}.
-          Shape lives in apps/site/app/data/profile.ts.
+          Shape lives in quocdaijr/qdjr app/data/profile.ts.
         </p>
       </Field>
 

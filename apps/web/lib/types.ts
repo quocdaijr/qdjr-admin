@@ -73,7 +73,7 @@ export interface Profile {
   social_links: Record<string, string>;
   location: string | null;
   email: string | null;
-  // Bilingual site copy rendered by apps/site ({"vi": …, "en": …}); opaque here.
+  // Bilingual site copy rendered by the public site (quocdaijr/qdjr) ({"vi": …, "en": …}); opaque here.
   content: Record<string, unknown>;
   updated_at: string;
 }
