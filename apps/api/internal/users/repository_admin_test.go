@@ -27,7 +27,9 @@ func newAdminFixture(t *testing.T) *adminFixture {
 	if dsn == "" {
 		t.Skip("set TEST_DATABASE_URL")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	// Generous: bcrypt (cost 12) under -race on a CI runner can take seconds per
+	// hash, and the accounts tests hash several times on this one context.
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	t.Cleanup(cancel)
 
 	pool, err := pgxpool.New(ctx, dsn)
