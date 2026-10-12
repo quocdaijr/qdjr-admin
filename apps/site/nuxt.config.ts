@@ -118,25 +118,9 @@ export default defineNuxtConfig({
     '@nuxt/eslint',
     '@pinia/nuxt',
     '@vite-pwa/nuxt',
-    '@nuxt/content',
     '@nuxtjs/i18n'
     // Note: robots and sitemap will be added back in next phase with proper configuration
   ],
-
-  // @nuxt/content configuration
-  content: {
-    build: {
-      markdown: {
-        highlight: {
-          theme: {
-            default: 'github-light-high-contrast',
-            dark: 'github-dark-high-contrast'
-          },
-          langs: ['js', 'ts', 'vue', 'bash', 'json', 'yaml', 'md', 'html', 'css', 'php', 'python', 'go']
-        }
-      }
-    }
-  },
 
   // Vietnamese at /, English under /en. Browsers whose preferred language is
   // English are redirected once from / to /en; the cookie remembers a manual
