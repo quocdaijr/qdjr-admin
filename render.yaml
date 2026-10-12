@@ -1,0 +1,39 @@
+# Render Blueprint for the Go API. Connect this repo once in the Render
+# dashboard (New → Blueprint); every push to main then redeploys.
+# Secrets marked sync: false are entered in the dashboard on first sync.
+services:
+  - type: web
+    name: qdjr-admin-api
+    runtime: docker
+    plan: free
+    region: singapore
+    rootDir: apps/api
+    dockerfilePath: ./apps/api/Dockerfile
+    dockerContext: ./apps/api
+    healthCheckPath: /healthz
+    autoDeployTrigger: commit
+    envVars:
+      - key: ENV
+        value: production
+      - key: PORT
+        value: "8080"
+      # Embedded goose migrations run before the server listens; a failing
+      # migration fails the health check and Render keeps the previous deploy.
+      - key: RUN_MIGRATIONS
+        value: "true"
+      - key: SUPABASE_URL
+        value: https://rknqbtaybeqdzwwonlmg.supabase.co
+      - key: SUPABASE_JWKS_URL
+        value: https://rknqbtaybeqdzwwonlmg.supabase.co/auth/v1/.well-known/jwks.json
+      # Admin origin: append the workers.dev URL printed by the first Cloudflare
+      # deploy (Task 10) and push; Render re-syncs the blueprint.
+      - key: CORS_ORIGINS
+        value: https://qdjr.dev,https://www.qdjr.dev
+      # Supabase *Session* pooler URL (port 5432, IPv4): the direct host is
+      # IPv6-only and transaction pooling breaks pgx prepared statements.
+      - key: DATABASE_URL
+        sync: false
+      - key: SUPABASE_JWT_SECRET
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
