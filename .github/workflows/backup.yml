@@ -1,0 +1,34 @@
+name: backup
+
+# Nightly pg_dump of the production (Neon) database into a PRIVATE R2 bucket,
+# keeping the newest 30. Restore steps: docs/runbooks/database-backup-restore.md.
+# GitHub disables scheduled workflows after 60 days without repo activity;
+# re-enable from the Actions tab if that happens.
+on:
+  schedule:
+    - cron: '30 19 * * *' # 02:30 Asia/Ho_Chi_Minh
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    name: pg_dump → R2
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Back up the database
+        env:
+          BACKUP_DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+          R2_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          R2_BACKUP_BUCKET: ${{ vars.R2_BACKUP_BUCKET || 'qdjr-backups' }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_BACKUP_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_BACKUP_SECRET_ACCESS_KEY }}
+        run: ./infra/backup/backup-db.sh
