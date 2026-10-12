@@ -8,8 +8,10 @@ services:
     plan: free
     region: singapore
     rootDir: apps/api
-    dockerfilePath: ./apps/api/Dockerfile
-    dockerContext: ./apps/api
+    # Both paths are relative to rootDir (Render resolved ./apps/api against
+    # apps/api and failed with "lstat .../apps/api/apps: no such file").
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
     healthCheckPath: /healthz
     autoDeployTrigger: commit
     envVars:
