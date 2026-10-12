@@ -16,6 +16,9 @@ type Config struct {
 	SupabaseJWKSURL        string
 	SupabaseServiceRoleKey string
 	CORSOrigins            []string
+	// RunMigrations applies embedded goose migrations before serving
+	// (RUN_MIGRATIONS=true). On in production, off locally.
+	RunMigrations bool
 }
 
 // Load reads configuration from the supplied env getter (use os.Getenv in main).
@@ -30,6 +33,7 @@ func Load(get func(string) string) (Config, error) {
 		SupabaseJWKSURL:        get("SUPABASE_JWKS_URL"),
 		SupabaseServiceRoleKey: get("SUPABASE_SERVICE_ROLE_KEY"),
 		CORSOrigins:            parseCSV(get("CORS_ORIGINS")),
+		RunMigrations:          get("RUN_MIGRATIONS") == "true",
 	}
 	var missing []string
 	if c.DatabaseURL == "" {

@@ -1,4 +1,5 @@
--- supabase/migrations/0003_content.sql
+-- apps/api/migrations/0003_content.sql
+-- +goose Up
 create table public.media (
     id            uuid primary key default gen_random_uuid(),
     filename      text not null,

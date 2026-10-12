@@ -1,4 +1,5 @@
--- supabase/migrations/0006_indexes.sql
+-- apps/api/migrations/0006_indexes.sql
+-- +goose Up
 create index posts_status_published_at_idx on public.posts (status, published_at desc);
 create index posts_created_by_idx on public.posts (created_by);
 create index post_tags_tag_id_idx on public.post_tags (tag_id);

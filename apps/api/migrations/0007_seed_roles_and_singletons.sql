@@ -1,4 +1,5 @@
--- supabase/seed.sql
+-- apps/api/migrations/0007_seed_roles_and_singletons.sql
+-- +goose Up
 -- Idempotent seed: roles + default singleton rows.
 
 insert into public.roles (name, description) values

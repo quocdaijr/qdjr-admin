@@ -25,8 +25,8 @@ func NewRepository(pool *pgxpool.Pool, urlPrefix string) *Repository {
 }
 
 // Get returns the singleton profile (id=1). The row is seeded by
-// supabase/seed.sql, so this should always succeed in a properly-initialised
-// database.
+// apps/api/migrations/0007_seed_roles_and_singletons.sql, so this should
+// always succeed in a properly-initialised database.
 func (r *Repository) Get(ctx context.Context) (Profile, error) {
 	const q = `
         SELECT p.id, p.full_name, p.bio, m.storage_path, p.tagline,

@@ -1,4 +1,5 @@
--- supabase/migrations/0002_rbac.sql
+-- apps/api/migrations/0002_rbac.sql
+-- +goose Up
 create table public.roles (
     id          smallint primary key generated always as identity,
     name        text not null unique,

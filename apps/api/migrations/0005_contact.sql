@@ -1,4 +1,5 @@
--- supabase/migrations/0005_contact.sql
+-- apps/api/migrations/0005_contact.sql
+-- +goose Up
 create table public.contact_messages (
     id          uuid primary key default gen_random_uuid(),
     name        text not null,

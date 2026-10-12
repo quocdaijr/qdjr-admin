@@ -21,6 +21,7 @@ import (
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/db"
 	apphttp "github.com/quocdaijr/qdjr-admin/apps/api/internal/http"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/media"
+	"github.com/quocdaijr/qdjr-admin/apps/api/internal/migrate"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/posts"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/profile"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/rbac"
@@ -58,6 +59,13 @@ func run() error {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	if cfg.RunMigrations {
+		if err := migrate.Up(ctx, cfg.DatabaseURL); err != nil {
+			return fmt.Errorf("migrate: %w", err)
+		}
+		log.Info("migrations applied")
+	}
 
 	pool, err := db.NewPool(ctx, cfg.DatabaseURL)
 	if err != nil {
