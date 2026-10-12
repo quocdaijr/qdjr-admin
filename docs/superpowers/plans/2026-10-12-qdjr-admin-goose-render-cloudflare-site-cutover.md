@@ -5001,3 +5001,18 @@ The checklist in Task 11 step 3 is the user's to-do (Supabase pooler URL + basel
 - **Deleting the bundled `profile.*.ts` / `SocialLinks` defaults**: kept as the offline fallback (Review Focus 1); remove once the API has uptime history.
 - **Durable trip-plan cache on Netlify**: `nitro.storage.trips` stays the `fs` driver; on Netlify it is per-instance and ephemeral. Move it to Netlify Blobs (`driver: 'netlify-blobs'`) if planning latency matters.
 - **A `site.yml` CI job**: Netlify runs the build; vitest for `apps/site` runs locally and in the PR checklist only.
+
+---
+
+## Execution notes (2026-10-12)
+
+Executed natively in one session on `feature/dainq/goose-render-cloudflare-site-cutover`. Deviations from the text above, each verified:
+
+- **Go 1.26, not 1.25.** `pressly/goose/v3@v3.29.0` requires Go 1.26, so `go.mod`, the Dockerfile and `api.yml` all pin 1.26 (pgx moved to v5.11.0 via `go mod tidy`).
+- **Next 16.3.8, not 16.4.0.** On 16.4.0 every route 500s inside the Worker with `Unexpected loadManifest(/.next/server/preview-props.json)` (OpenNext 1.20.10). 16.3.8 is the adapter's floor and passes all admin e2e inside `opennextjs-cloudflare preview`. Bump when the adapter supports 16.4.
+- **pnpm.** `pnpm-workspace.yaml` allows the `esbuild` and `workerd` install scripts for pnpm 10 (`onlyBuiltDependencies`, used by CI) and pnpm 11+ (`allowBuilds`). The lockfile was regenerated with pnpm 10. `pnpm deploy` is a pnpm built-in, so docs say `pnpm run deploy`.
+- **`apps/site` keeps its own `design.md` and `.hallmark/`** (the public site's design system); the plan's prune list was wrong to include `.hallmark`.
+- **Extra fixes found while verifying:** user menu threw on open (Base UI `GroupLabel` outside `Group`, already on `main`), so sign-out was unreachable — fixed with an e2e pin; pre-existing `setState`-in-effect lint error in the role dialog; 320px overflow on list toolbars; ESLint ignoring `.open-next`/`.wrangler`; unused legacy `dayjs` plugin and `LegacyUnavailable.vue` removed; `.netlify` gitignored; generic arrow in `app.vue` rewritten (ESLint parsed it as JSX).
+- **Local-only, not committed:** `supabase/config.toml` DB port 55322 (another project holds 54322 on this machine) and extra local `CORS_ORIGINS`.
+
+Verification evidence: API `go test -race ./...` with DB tests (3 clean uncached runs); admin 5/5 Playwright on `next dev` and 4/4 inside the Worker preview; light/dark sweep at 320–1280 px (no overflow, correct fonts, ⌘K works); site unit 276/276; site Playwright desktop fails the same 13 3D-scene/trip tests as the original `qdjr` repo under identical conditions (no regressions); 15-row browser walkthrough all PASS (screenshots in `~/.claude/plans/screens/walk-*.png`); site renders with the API down and leaks no admin URL.
