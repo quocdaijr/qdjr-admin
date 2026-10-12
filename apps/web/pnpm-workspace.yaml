@@ -1,3 +1,13 @@
+# wrangler / OpenNext need esbuild's and workerd's native binaries.
+# onlyBuiltDependencies: pnpm 10 (CI). allowBuilds: pnpm 11+.
+onlyBuiltDependencies:
+  - esbuild
+  - workerd
+allowBuilds:
+  esbuild: true
+  workerd: true
+  msw: false
+  unrs-resolver: false
 ignoredBuiltDependencies:
   - sharp
   - unrs-resolver
