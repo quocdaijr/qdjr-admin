@@ -3,6 +3,7 @@ module github.com/quocdaijr/qdjr-admin/apps/api
 go 1.27.0
 
 require (
+	connectrpc.com/connect v1.21.0
 	github.com/aws/aws-sdk-go-v2 v1.47.3
 	github.com/aws/aws-sdk-go-v2/credentials v1.20.9
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.114.3
@@ -15,6 +16,7 @@ require (
 	golang.org/x/crypto v0.58.0
 	golang.org/x/image v0.47.0
 	golang.org/x/time v0.16.0
+	google.golang.org/protobuf v1.36.12
 )
 
 require (
@@ -62,5 +64,4 @@ require (
 	golang.org/x/sync v0.24.0 // indirect
 	golang.org/x/sys v0.49.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
-	google.golang.org/protobuf v1.36.12 // indirect
 )
