@@ -181,7 +181,7 @@ export function PostsTable() {
                   <TableCell />
                 </TableRow>
               ))
-            ) : isError ? (
+            ) : isError && !data ? (
               <TableRow>
                 <TableCell colSpan={6} className="text-center text-destructive">
                   {error instanceof Error ? error.message : 'Failed to load posts'}

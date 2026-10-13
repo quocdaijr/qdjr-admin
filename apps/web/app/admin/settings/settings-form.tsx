@@ -85,7 +85,9 @@ export function SettingsForm() {
     return <Skeleton className="h-64 w-full max-w-2xl" />;
   }
 
-  if (settingsQuery.isError) {
+  // A failed reload (e.g. after saving) keeps the form; only a first load
+  // with nothing to show is replaced by the error.
+  if (settingsQuery.isError && !settingsQuery.data) {
     return (
       <p className="text-sm text-destructive">
         {settingsQuery.error instanceof Error

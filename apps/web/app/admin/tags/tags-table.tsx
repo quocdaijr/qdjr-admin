@@ -132,7 +132,7 @@ export function TagsTable() {
                   <TableCell />
                 </TableRow>
               ))
-            ) : isError ? (
+            ) : isError && !data ? (
               <TableRow>
                 <TableCell colSpan={4} className="text-center text-destructive">
                   {error instanceof Error

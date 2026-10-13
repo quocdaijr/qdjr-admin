@@ -130,7 +130,7 @@ export function UsersTable() {
                   <TableCell />
                 </TableRow>
               ))
-            ) : isError ? (
+            ) : isError && !data ? (
               <TableRow>
                 <TableCell colSpan={5} className="text-center text-destructive">
                   {error instanceof Error

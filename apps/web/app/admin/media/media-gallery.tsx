@@ -77,7 +77,7 @@ export function MediaGallery() {
             <Skeleton key={i} className="aspect-square w-full" />
           ))}
         </div>
-      ) : isError ? (
+      ) : isError && !data ? (
         <p className="text-center text-destructive">
           {error instanceof Error ? error.message : 'Failed to load media'}
         </p>

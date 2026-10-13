@@ -101,7 +101,9 @@ export function ProfileForm() {
     return <Skeleton className="h-64 w-full max-w-2xl" />;
   }
 
-  if (profileQuery.isError) {
+  // A failed reload (e.g. after saving) keeps the form; only a first load
+  // with nothing to show is replaced by the error.
+  if (profileQuery.isError && !profileQuery.data) {
     return (
       <p className="text-sm text-destructive">
         {profileQuery.error instanceof Error
