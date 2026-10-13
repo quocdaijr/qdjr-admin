@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
 
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/auth"
 	lessonsv1 "github.com/quocdaijr/qdjr-admin/apps/api/internal/gen/lessons/v1"
@@ -359,4 +360,25 @@ func TestRPC_RPCLog_LogsProcedureAndCode(t *testing.T) {
 	_, err = e.client(t, uuid.New()).ListCourses(context.Background(), connect.NewRequest(&lessonsv1.ListCoursesRequest{}))
 	require.NoError(t, err)
 	assert.Contains(t, buf.String(), `"code":"ok"`)
+}
+
+// TestRPC_CreateCourse_LongTitle_FieldViolation: the InvalidArgument error
+// carries a google.rpc.BadRequest detail naming the field, decoded by the
+// real client over the wire, so a form can show it next to the input.
+func TestRPC_CreateCourse_LongTitle_FieldViolation(t *testing.T) {
+	e := newEnv(t, "lessons:write")
+	_, err := e.client(t, uuid.New()).CreateCourse(context.Background(),
+		connect.NewRequest(&lessonsv1.CreateCourseRequest{Title: strings.Repeat("é", 201)}))
+	require.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+
+	var cerr *connect.Error
+	require.ErrorAs(t, err, &cerr)
+	require.Len(t, cerr.Details(), 1)
+	v, derr := cerr.Details()[0].Value()
+	require.NoError(t, derr)
+	br, ok := v.(*errdetails.BadRequest)
+	require.True(t, ok, "detail is %T", v)
+	require.Len(t, br.GetFieldViolations(), 1)
+	assert.Equal(t, "title", br.GetFieldViolations()[0].GetField())
+	assert.Contains(t, br.GetFieldViolations()[0].GetDescription(), "200")
 }

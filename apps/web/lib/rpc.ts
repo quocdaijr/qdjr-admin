@@ -6,6 +6,7 @@
 import { Code, ConnectError, createClient, type Interceptor } from '@connectrpc/connect';
 import { createConnectTransport } from '@connectrpc/connect-web';
 
+import { BadRequestSchema } from '@/gen/google/rpc/error_details_pb';
 import { LessonsService } from '@/gen/lessons/v1/lessons_pb';
 
 import { getAccessToken, refreshSession, signOut } from './auth';
@@ -39,4 +40,27 @@ export function rpcErrorMessage(err: unknown, fallback = 'Request failed'): stri
   if (err instanceof ConnectError) return `${Code[err.code]}: ${err.rawMessage}`;
   if (err instanceof Error) return err.message;
   return fallback;
+}
+
+/**
+ * Puts the field violations the server attached as a google.rpc.BadRequest
+ * detail onto the matching form fields. Returns true if any were shown, so
+ * the caller can fall back to a toast otherwise.
+ */
+export function setFieldErrors<F extends string>(
+  err: unknown,
+  fields: readonly F[],
+  setError: (name: F, error: { type: string; message: string }) => void
+): boolean {
+  if (!(err instanceof ConnectError)) return false;
+  let shown = false;
+  for (const detail of err.findDetails(BadRequestSchema)) {
+    for (const v of detail.fieldViolations) {
+      const name = fields.find((f) => f === v.field);
+      if (!name) continue;
+      setError(name, { type: 'server', message: v.description });
+      shown = true;
+    }
+  }
+  return shown;
 }

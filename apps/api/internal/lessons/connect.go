@@ -10,6 +10,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
 
 	lessonsv1 "github.com/quocdaijr/qdjr-admin/apps/api/internal/gen/lessons/v1"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/gen/lessons/v1/lessonsv1connect"
@@ -184,13 +185,13 @@ func (h *Handler) UpdateLesson(ctx context.Context, req *connect.Request[lessons
 	if req.Msg.Status != nil {
 		st, ok := statusFromProto(*req.Msg.Status)
 		if !ok {
-			return nil, invalid("status must be todo, in_progress or done")
+			return nil, invalidField("status", "status must be todo, in_progress or done")
 		}
 		in.Status = &st
 	}
 	if req.Msg.Position != nil {
 		if *req.Msg.Position < 0 {
-			return nil, invalid("position must be >= 0")
+			return nil, invalidField("position", "position must be >= 0")
 		}
 		pos := int(*req.Msg.Position)
 		in.Position = &pos
@@ -220,6 +221,19 @@ func invalid(msg string) error {
 	return connect.NewError(connect.CodeInvalidArgument, errors.New(msg))
 }
 
+// invalidField is invalid plus a google.rpc.BadRequest detail naming the
+// field, so a client can put the message next to the input, not in a toast.
+func invalidField(field, msg string) error {
+	cerr := connect.NewError(connect.CodeInvalidArgument, errors.New(msg))
+	detail, err := connect.NewErrorDetail(&errdetails.BadRequest{
+		FieldViolations: []*errdetails.BadRequest_FieldViolation{{Field: field, Description: msg}},
+	})
+	if err == nil {
+		cerr.AddDetail(detail)
+	}
+	return cerr
+}
+
 func mapErr(err error) error {
 	if errors.Is(err, ErrNotFound) {
 		return connect.NewError(connect.CodeNotFound, err)
@@ -240,7 +254,7 @@ func parseID(s string) (uuid.UUID, error) {
 func cleanTitle(s string) (string, error) {
 	s = strings.TrimSpace(s)
 	if n := utf8.RuneCountInString(s); n == 0 || n > maxTitleRunes {
-		return "", invalid(fmt.Sprintf("title must be 1..%d characters", maxTitleRunes))
+		return "", invalidField("title", fmt.Sprintf("title must be 1..%d characters", maxTitleRunes))
 	}
 	return s, nil
 }

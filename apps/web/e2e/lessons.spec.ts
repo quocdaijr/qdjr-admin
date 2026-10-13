@@ -58,3 +58,15 @@ test('lessons: create course, add lesson, mark done, progress updates, delete co
   await page.getByRole('dialog').getByRole('button', { name: 'Delete' }).click();
   await expect(page.getByRole('row', { name: new RegExp(courseTitle) })).toHaveCount(0);
 });
+
+test('lessons: server field error shows under the title input', async ({ page }) => {
+  await login(page);
+  await page.goto('/admin/lessons');
+  await page.getByRole('button', { name: 'New course' }).click();
+  const dialog = page.getByRole('dialog');
+  // 201 characters: only the server rejects it (google.rpc.BadRequest detail).
+  await dialog.getByLabel('Title').fill('a'.repeat(201));
+  await dialog.getByRole('button', { name: 'Create' }).click();
+  await expect(dialog.getByText('title must be 1..200 characters')).toBeVisible();
+  await expect(dialog).toBeVisible();
+});

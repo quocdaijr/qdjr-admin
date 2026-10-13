@@ -12,7 +12,7 @@
     "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
     "lint": "eslint",
     "test:e2e": "playwright test",
-    "proto:gen": "cd ../.. && buf lint && buf generate"
+    "proto:gen": "cd ../.. && buf lint && buf generate && buf generate --template buf.gen.errdetails.yaml"
   },
   "dependencies": {
     "@base-ui/react": "^1.9.0",

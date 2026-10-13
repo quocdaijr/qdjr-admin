@@ -1,0 +1,13 @@
+# TS-only codegen for google.rpc.BadRequest, so the admin can decode the field
+# violations the lessons service attaches to InvalidArgument errors. Go uses
+# google.golang.org/genproto instead; generating it here too would register
+# the same message twice. googleapis is pinned so the CI drift check is stable.
+version: v2
+inputs:
+  - module: buf.build/googleapis/googleapis:c17df5b2beca46928cc87d5656bd5343
+    paths:
+      - google/rpc/error_details.proto
+plugins:
+  - remote: buf.build/bufbuild/es:v2.16.0
+    out: apps/web/gen
+    opt: target=ts
