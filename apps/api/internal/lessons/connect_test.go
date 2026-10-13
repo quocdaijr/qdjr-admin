@@ -1,7 +1,9 @@
 package lessons
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -163,6 +165,12 @@ type env struct {
 // behind ConnectCORS + RPCAuth, h2c enabled.
 func newEnv(t *testing.T, perms ...string) *env {
 	t.Helper()
+	return newEnvWith(t, nil, perms...)
+}
+
+// newEnvWith is newEnv with extra interceptors mounted before RPCAuth.
+func newEnvWith(t *testing.T, extra []connect.Interceptor, perms ...string) *env {
+	t.Helper()
 	repo := newStubRepo()
 	res := &resolverStub{perms: map[string]bool{}}
 	for _, p := range perms {
@@ -170,7 +178,7 @@ func newEnv(t *testing.T, perms ...string) *env {
 	}
 	v := auth.NewHS256Verifier([]byte(testSecret))
 	mux := http.NewServeMux()
-	path, h := NewConnectHandler(repo, apphttp.RPCAuth(v, res, "lessons:write"))
+	path, h := NewConnectHandler(repo, append(extra, apphttp.RPCAuth(v, res, "lessons:write"))...)
 	mux.Handle(path, apphttp.ConnectCORS(nil)(h))
 
 	srv := httptest.NewUnstartedServer(mux)
@@ -330,4 +338,25 @@ func TestRPC_HandlerPanic_Internal(t *testing.T) {
 	e.repo.panicOnList = true
 	_, err := e.client(t, uuid.New()).ListCourses(context.Background(), connect.NewRequest(&lessonsv1.ListCoursesRequest{}))
 	assert.Equal(t, connect.CodeInternal, connect.CodeOf(err))
+}
+
+// TestRPC_RPCLog_LogsProcedureAndCode: one log line per call, including
+// calls RPCAuth rejects, with the procedure, the connect code and a duration.
+func TestRPC_RPCLog_LogsProcedureAndCode(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&buf, nil))
+	e := newEnvWith(t, []connect.Interceptor{apphttp.RPCLog(logger)}, "lessons:write")
+
+	anon := lessonsv1connect.NewLessonsServiceClient(http.DefaultClient, e.srv.URL)
+	_, err := anon.ListCourses(context.Background(), connect.NewRequest(&lessonsv1.ListCoursesRequest{}))
+	require.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
+	denied := buf.String()
+	assert.Contains(t, denied, `"procedure":"/lessons.v1.LessonsService/ListCourses"`)
+	assert.Contains(t, denied, `"code":"unauthenticated"`)
+	assert.Contains(t, denied, `"duration_ms"`)
+
+	buf.Reset()
+	_, err = e.client(t, uuid.New()).ListCourses(context.Background(), connect.NewRequest(&lessonsv1.ListCoursesRequest{}))
+	require.NoError(t, err)
+	assert.Contains(t, buf.String(), `"code":"ok"`)
 }
