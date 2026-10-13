@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -44,20 +44,22 @@ func signedToken(t *testing.T, uid uuid.UUID, exp time.Time) string {
 	return s
 }
 
-// callThrough runs the interceptor with a next that records the ctx user id.
-func callThrough(t *testing.T, i connect.Interceptor, authHeader string) (uuid.UUID, bool, error) {
+// callThrough runs the interceptor through a real v2 server: Server.Call with
+// an unknown-method handler that records the caller id from ctx.
+func callThrough(t *testing.T, i connect.ServerInterceptor, authHeader string) (uuid.UUID, bool, error) {
 	t.Helper()
 	var seen uuid.UUID
 	var ok bool
-	next := func(ctx context.Context, _ connect.AnyRequest) (connect.AnyResponse, error) {
+	srv := connect.NewServer(i)
+	srv.SetUnknownHandler(func(ctx context.Context, _ connect.Spec, _ connect.ServerStream) error {
 		seen, ok = UserIDFrom(ctx)
-		return connect.NewResponse(&struct{}{}), nil
-	}
-	req := connect.NewRequest(&struct{}{})
+		return nil
+	})
+	_, info := connect.NewClientContext(context.Background())
 	if authHeader != "" {
-		req.Header().Set("Authorization", authHeader)
+		info.RequestHeader().Set("Authorization", authHeader)
 	}
-	_, err := i.WrapUnary(next)(context.Background(), req)
+	err := srv.Call(context.Background(), "/test.v1.Probe/Call", info, nil)
 	return seen, ok, err
 }
 
@@ -139,4 +141,29 @@ func TestConnectCORS_PassesPostThrough(t *testing.T) {
 
 	assert.Equal(t, http.StatusTeapot, rr.Code)
 	assert.Equal(t, "https://admin.example", rr.Header().Get("Access-Control-Allow-Origin"))
+}
+
+func TestRPCRecover_PanicBecomesInternal_ValueNotSent(t *testing.T) {
+	srv := connect.NewServer(RPCRecover())
+	srv.SetUnknownHandler(func(context.Context, connect.Spec, connect.ServerStream) error {
+		panic("secret: dsn=postgres://u:p@db")
+	})
+	err := srv.Call(context.Background(), "/test.v1.Probe/Call", nil, nil)
+	var cerr *connect.Error
+	require.ErrorAs(t, err, &cerr)
+	assert.Equal(t, connect.CodeInternal, cerr.Code())
+	assert.NotContains(t, cerr.Message(), "secret")
+	assert.ErrorContains(t, errors.Unwrap(cerr), "secret", "the panic stays available server-side as the cause")
+}
+
+// TestRPCRecover_RepanicsAbortHandler: net/http's sentinel for aborting a
+// response must pass through, or the server would turn an abort into a 200.
+func TestRPCRecover_RepanicsAbortHandler(t *testing.T) {
+	srv := connect.NewServer(RPCRecover())
+	srv.SetUnknownHandler(func(context.Context, connect.Spec, connect.ServerStream) error {
+		panic(http.ErrAbortHandler)
+	})
+	assert.PanicsWithValue(t, http.ErrAbortHandler, func() {
+		_ = srv.Call(context.Background(), "/test.v1.Probe/Call", nil, nil)
+	})
 }

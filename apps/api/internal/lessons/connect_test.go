@@ -7,13 +7,16 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
+	"connectrpc.com/connect/v2/connectproto"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -199,7 +202,7 @@ func newEnv(t *testing.T, perms ...string) *env {
 }
 
 // newEnvWith is newEnv with extra interceptors mounted before RPCAuth.
-func newEnvWith(t *testing.T, extra []connect.Interceptor, perms ...string) *env {
+func newEnvWith(t *testing.T, extra []connect.ServerInterceptor, perms ...string) *env {
 	t.Helper()
 	repo := newStubRepo()
 	res := &resolverStub{perms: map[string]bool{}}
@@ -208,8 +211,8 @@ func newEnvWith(t *testing.T, extra []connect.Interceptor, perms ...string) *env
 	}
 	v := auth.NewHS256Verifier([]byte(testSecret))
 	mux := http.NewServeMux()
-	path, h := NewConnectHandler(repo, append(extra, apphttp.RPCAuth(v, res, "lessons:write"))...)
-	mux.Handle(path, apphttp.ConnectCORS(nil)(h))
+	server := NewServer(repo, append(slices.Clone(extra), apphttp.RPCAuth(v, res, "lessons:write"))...)
+	Mount(apphttp.WrapMux(mux, apphttp.ConnectCORS(nil)), server)
 
 	srv := httptest.NewUnstartedServer(mux)
 	var p http.Protocols
@@ -229,62 +232,56 @@ func token(t *testing.T, uid uuid.UUID, exp time.Time) string {
 	return s
 }
 
-func bearer(tok string) connect.ClientOption {
-	return connect.WithInterceptors(bearerInterceptor{value: "Bearer " + tok})
-}
-
-// bearerInterceptor stamps unary and streaming calls alike; a
-// UnaryInterceptorFunc would silently skip WatchCourse.
-type bearerInterceptor struct{ value string }
-
-func (b bearerInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		req.Header().Set("Authorization", b.value)
-		return next(ctx, req)
+// bearer stamps every call, unary or streaming: a v2 client interceptor wraps
+// all RPC types, and the client attaches a CallInfo before interceptors run.
+func bearer(tok string) connect.ClientInterceptor {
+	return func(next connect.ClientFunc) connect.ClientFunc {
+		return func(ctx context.Context, spec connect.Spec) (connect.ClientStream, error) {
+			if info, ok := connect.CallInfoForClientContext(ctx); ok {
+				info.RequestHeader().Set("Authorization", "Bearer "+tok)
+			}
+			return next(ctx, spec)
+		}
 	}
 }
 
-func (b bearerInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
-	return func(ctx context.Context, spec connect.Spec) connect.StreamingClientConn {
-		conn := next(ctx, spec)
-		conn.RequestHeader().Set("Authorization", b.value)
-		return conn
+// newClient builds a lessons client over HTTP; tok "" sends no bearer.
+func newClient(hc connecthttp.HTTPClient, baseURL, tok string, opts ...connecthttp.Option) lessonsv1connect.LessonsServiceClient {
+	var interceptors []connect.ClientInterceptor
+	if tok != "" {
+		interceptors = append(interceptors, bearer(tok))
 	}
+	return lessonsv1connect.NewLessonsServiceClient(connect.NewClient(connecthttp.NewTransport(hc, baseURL, opts...), interceptors...))
 }
 
-func (b bearerInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
-	return next
-}
-
-func (e *env) client(t *testing.T, uid uuid.UUID, opts ...connect.ClientOption) lessonsv1connect.LessonsServiceClient {
+func (e *env) client(t *testing.T, uid uuid.UUID, opts ...connecthttp.Option) lessonsv1connect.LessonsServiceClient {
 	t.Helper()
-	opts = append([]connect.ClientOption{bearer(token(t, uid, time.Now().Add(time.Hour)))}, opts...)
-	return lessonsv1connect.NewLessonsServiceClient(http.DefaultClient, e.srv.URL, opts...)
+	return newClient(http.DefaultClient, e.srv.URL, token(t, uid, time.Now().Add(time.Hour)), opts...)
 }
 
 func TestRPC_NoToken_Unauthenticated(t *testing.T) {
 	e := newEnv(t, "lessons:write")
-	c := lessonsv1connect.NewLessonsServiceClient(http.DefaultClient, e.srv.URL)
-	_, err := c.ListCourses(context.Background(), connect.NewRequest(&lessonsv1.ListCoursesRequest{}))
+	c := newClient(http.DefaultClient, e.srv.URL, "")
+	_, err := c.ListCourses(context.Background(), &lessonsv1.ListCoursesRequest{})
 	assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
 }
 
 func TestRPC_ExpiredToken_Unauthenticated(t *testing.T) {
 	e := newEnv(t, "lessons:write")
-	c := lessonsv1connect.NewLessonsServiceClient(http.DefaultClient, e.srv.URL, bearer(token(t, uuid.New(), time.Now().Add(-time.Minute))))
-	_, err := c.ListCourses(context.Background(), connect.NewRequest(&lessonsv1.ListCoursesRequest{}))
+	c := newClient(http.DefaultClient, e.srv.URL, token(t, uuid.New(), time.Now().Add(-time.Minute)))
+	_, err := c.ListCourses(context.Background(), &lessonsv1.ListCoursesRequest{})
 	assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
 }
 
 func TestRPC_MissingPermission_PermissionDenied(t *testing.T) {
 	e := newEnv(t) // author-like: no lessons:write
-	_, err := e.client(t, uuid.New()).ListCourses(context.Background(), connect.NewRequest(&lessonsv1.ListCoursesRequest{}))
+	_, err := e.client(t, uuid.New()).ListCourses(context.Background(), &lessonsv1.ListCoursesRequest{})
 	assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err))
 }
 
 func TestRPC_ListCourses_PassesFilter(t *testing.T) {
 	e := newEnv(t, "lessons:write")
-	_, err := e.client(t, uuid.New()).ListCourses(context.Background(), connect.NewRequest(&lessonsv1.ListCoursesRequest{Page: 2, PerPage: 5, Q: "go"}))
+	_, err := e.client(t, uuid.New()).ListCourses(context.Background(), &lessonsv1.ListCoursesRequest{Page: 2, PerPage: 5, Q: "go"})
 	require.NoError(t, err)
 	assert.Equal(t, ListFilter{Page: 2, PerPage: 5, Q: "go"}, e.repo.listFilt)
 }
@@ -292,16 +289,16 @@ func TestRPC_ListCourses_PassesFilter(t *testing.T) {
 func TestRPC_CreateCourse_OK_RecordsCreator(t *testing.T) {
 	e := newEnv(t, "lessons:write")
 	uid := uuid.New()
-	res, err := e.client(t, uid).CreateCourse(context.Background(), connect.NewRequest(&lessonsv1.CreateCourseRequest{Title: "  Effective Go  ", Url: "https://go.dev/doc/effective_go", Provider: "go.dev"}))
+	res, err := e.client(t, uid).CreateCourse(context.Background(), &lessonsv1.CreateCourseRequest{Title: "  Effective Go  ", Url: "https://go.dev/doc/effective_go", Provider: "go.dev"})
 	require.NoError(t, err)
-	assert.Equal(t, "Effective Go", res.Msg.GetCourse().GetTitle())
+	assert.Equal(t, "Effective Go", res.GetCourse().GetTitle())
 	assert.Equal(t, uid, e.repo.createCourseIn.CreatedBy)
-	assert.NotNil(t, res.Msg.GetCourse().GetCreatedAt())
+	assert.NotNil(t, res.GetCourse().GetCreatedAt())
 }
 
 func TestRPC_CreateCourse_BlankTitle_InvalidArgument(t *testing.T) {
 	e := newEnv(t, "lessons:write")
-	_, err := e.client(t, uuid.New()).CreateCourse(context.Background(), connect.NewRequest(&lessonsv1.CreateCourseRequest{Title: "   "}))
+	_, err := e.client(t, uuid.New()).CreateCourse(context.Background(), &lessonsv1.CreateCourseRequest{Title: "   "})
 	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
 }
 
@@ -309,35 +306,35 @@ func TestRPC_CreateCourse_LongTitle_InvalidArgument(t *testing.T) {
 	e := newEnv(t, "lessons:write")
 	// 201 multibyte runes: byte length would be 402, rune count is what matters.
 	long := strings.Repeat("é", 201)
-	_, err := e.client(t, uuid.New()).CreateCourse(context.Background(), connect.NewRequest(&lessonsv1.CreateCourseRequest{Title: long}))
+	_, err := e.client(t, uuid.New()).CreateCourse(context.Background(), &lessonsv1.CreateCourseRequest{Title: long})
 	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
 }
 
 func TestRPC_GetCourse_BadID_InvalidArgument(t *testing.T) {
 	e := newEnv(t, "lessons:write")
-	_, err := e.client(t, uuid.New()).GetCourse(context.Background(), connect.NewRequest(&lessonsv1.GetCourseRequest{Id: "nope"}))
+	_, err := e.client(t, uuid.New()).GetCourse(context.Background(), &lessonsv1.GetCourseRequest{Id: "nope"})
 	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
 }
 
 func TestRPC_GetCourse_Unknown_NotFound(t *testing.T) {
 	e := newEnv(t, "lessons:write")
-	_, err := e.client(t, uuid.New()).GetCourse(context.Background(), connect.NewRequest(&lessonsv1.GetCourseRequest{Id: uuid.NewString()}))
+	_, err := e.client(t, uuid.New()).GetCourse(context.Background(), &lessonsv1.GetCourseRequest{Id: uuid.NewString()})
 	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
 }
 
 func TestRPC_UpdateLesson_StatusDone(t *testing.T) {
 	e := newEnv(t, "lessons:write")
 	c := e.client(t, uuid.New())
-	course, err := c.CreateCourse(context.Background(), connect.NewRequest(&lessonsv1.CreateCourseRequest{Title: "c"}))
+	course, err := c.CreateCourse(context.Background(), &lessonsv1.CreateCourseRequest{Title: "c"})
 	require.NoError(t, err)
-	lesson, err := c.CreateLesson(context.Background(), connect.NewRequest(&lessonsv1.CreateLessonRequest{CourseId: course.Msg.GetCourse().GetId(), Title: "l"}))
+	lesson, err := c.CreateLesson(context.Background(), &lessonsv1.CreateLessonRequest{CourseId: course.GetCourse().GetId(), Title: "l"})
 	require.NoError(t, err)
 
 	done := lessonsv1.LessonStatus_LESSON_STATUS_DONE
-	res, err := c.UpdateLesson(context.Background(), connect.NewRequest(&lessonsv1.UpdateLessonRequest{Id: lesson.Msg.GetLesson().GetId(), Status: &done}))
+	res, err := c.UpdateLesson(context.Background(), &lessonsv1.UpdateLessonRequest{Id: lesson.GetLesson().GetId(), Status: &done})
 	require.NoError(t, err)
-	assert.Equal(t, lessonsv1.LessonStatus_LESSON_STATUS_DONE, res.Msg.GetLesson().GetStatus())
-	assert.NotNil(t, res.Msg.GetLesson().GetCompletedAt())
+	assert.Equal(t, lessonsv1.LessonStatus_LESSON_STATUS_DONE, res.GetLesson().GetStatus())
+	assert.NotNil(t, res.GetLesson().GetCompletedAt())
 	require.NotNil(t, e.repo.updateLessonIn.Status)
 	assert.Equal(t, StatusDone, *e.repo.updateLessonIn.Status)
 }
@@ -345,13 +342,13 @@ func TestRPC_UpdateLesson_StatusDone(t *testing.T) {
 func TestRPC_UpdateLesson_UnspecifiedStatus_InvalidArgument(t *testing.T) {
 	e := newEnv(t, "lessons:write")
 	unspecified := lessonsv1.LessonStatus_LESSON_STATUS_UNSPECIFIED
-	_, err := e.client(t, uuid.New()).UpdateLesson(context.Background(), connect.NewRequest(&lessonsv1.UpdateLessonRequest{Id: uuid.NewString(), Status: &unspecified}))
+	_, err := e.client(t, uuid.New()).UpdateLesson(context.Background(), &lessonsv1.UpdateLessonRequest{Id: uuid.NewString(), Status: &unspecified})
 	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
 }
 
 func TestRPC_DeleteCourse_Unknown_NotFound(t *testing.T) {
 	e := newEnv(t, "lessons:write")
-	_, err := e.client(t, uuid.New()).DeleteCourse(context.Background(), connect.NewRequest(&lessonsv1.DeleteCourseRequest{Id: uuid.NewString()}))
+	_, err := e.client(t, uuid.New()).DeleteCourse(context.Background(), &lessonsv1.DeleteCourseRequest{Id: uuid.NewString()})
 	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
 }
 
@@ -362,11 +359,10 @@ func TestRPC_NativeGRPC_OverH2C(t *testing.T) {
 	var cp http.Protocols
 	cp.SetUnencryptedHTTP2(true) // no HTTP/1 → prior-knowledge h2c
 	h2c := &http.Client{Transport: &http.Transport{Protocols: &cp}}
-	c := lessonsv1connect.NewLessonsServiceClient(h2c, e.srv.URL,
-		connect.WithGRPC(), bearer(token(t, uuid.New(), time.Now().Add(time.Hour))))
-	res, err := c.ListCourses(context.Background(), connect.NewRequest(&lessonsv1.ListCoursesRequest{}))
+	c := newClient(h2c, e.srv.URL, token(t, uuid.New(), time.Now().Add(time.Hour)), connecthttp.WithGRPC())
+	res, err := c.ListCourses(context.Background(), &lessonsv1.ListCoursesRequest{})
 	require.NoError(t, err)
-	assert.Equal(t, int32(0), res.Msg.GetTotal())
+	assert.Equal(t, int32(0), res.GetTotal())
 }
 
 // TestRPC_OversizedBody_ResourceExhausted: the body is read before the auth
@@ -375,7 +371,7 @@ func TestRPC_NativeGRPC_OverH2C(t *testing.T) {
 func TestRPC_OversizedBody_ResourceExhausted(t *testing.T) {
 	e := newEnv(t, "lessons:write")
 	huge := strings.Repeat("x", maxRequestBytes+1)
-	_, err := e.client(t, uuid.New()).CreateCourse(context.Background(), connect.NewRequest(&lessonsv1.CreateCourseRequest{Title: "big", Notes: huge}))
+	_, err := e.client(t, uuid.New()).CreateCourse(context.Background(), &lessonsv1.CreateCourseRequest{Title: "big", Notes: huge})
 	assert.Equal(t, connect.CodeResourceExhausted, connect.CodeOf(err))
 }
 
@@ -384,7 +380,7 @@ func TestRPC_OversizedBody_ResourceExhausted(t *testing.T) {
 func TestRPC_HandlerPanic_Internal(t *testing.T) {
 	e := newEnv(t, "lessons:write")
 	e.repo.panicOnList = true
-	_, err := e.client(t, uuid.New()).ListCourses(context.Background(), connect.NewRequest(&lessonsv1.ListCoursesRequest{}))
+	_, err := e.client(t, uuid.New()).ListCourses(context.Background(), &lessonsv1.ListCoursesRequest{})
 	assert.Equal(t, connect.CodeInternal, connect.CodeOf(err))
 }
 
@@ -393,10 +389,10 @@ func TestRPC_HandlerPanic_Internal(t *testing.T) {
 func TestRPC_RPCLog_LogsProcedureAndCode(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewJSONHandler(&buf, nil))
-	e := newEnvWith(t, []connect.Interceptor{apphttp.RPCLog(logger)}, "lessons:write")
+	e := newEnvWith(t, []connect.ServerInterceptor{apphttp.RPCLog(logger)}, "lessons:write")
 
-	anon := lessonsv1connect.NewLessonsServiceClient(http.DefaultClient, e.srv.URL)
-	_, err := anon.ListCourses(context.Background(), connect.NewRequest(&lessonsv1.ListCoursesRequest{}))
+	anon := newClient(http.DefaultClient, e.srv.URL, "")
+	_, err := anon.ListCourses(context.Background(), &lessonsv1.ListCoursesRequest{})
 	require.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
 	denied := buf.String()
 	assert.Contains(t, denied, `"procedure":"/lessons.v1.LessonsService/ListCourses"`)
@@ -404,7 +400,7 @@ func TestRPC_RPCLog_LogsProcedureAndCode(t *testing.T) {
 	assert.Contains(t, denied, `"duration_ms"`)
 
 	buf.Reset()
-	_, err = e.client(t, uuid.New()).ListCourses(context.Background(), connect.NewRequest(&lessonsv1.ListCoursesRequest{}))
+	_, err = e.client(t, uuid.New()).ListCourses(context.Background(), &lessonsv1.ListCoursesRequest{})
 	require.NoError(t, err)
 	assert.Contains(t, buf.String(), `"code":"ok"`)
 }
@@ -415,13 +411,13 @@ func TestRPC_RPCLog_LogsProcedureAndCode(t *testing.T) {
 func TestRPC_CreateCourse_LongTitle_FieldViolation(t *testing.T) {
 	e := newEnv(t, "lessons:write")
 	_, err := e.client(t, uuid.New()).CreateCourse(context.Background(),
-		connect.NewRequest(&lessonsv1.CreateCourseRequest{Title: strings.Repeat("é", 201)}))
+		&lessonsv1.CreateCourseRequest{Title: strings.Repeat("é", 201)})
 	require.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
 
 	var cerr *connect.Error
 	require.ErrorAs(t, err, &cerr)
 	require.Len(t, cerr.Details(), 1)
-	v, derr := cerr.Details()[0].Value()
+	v, derr := connectproto.UnmarshalErrorDetail(cerr.Details()[0])
 	require.NoError(t, derr)
 	br, ok := v.(*errdetails.BadRequest)
 	require.True(t, ok, "detail is %T", v)
@@ -454,7 +450,7 @@ func fieldOf(t *testing.T, err error) string {
 	var cerr *connect.Error
 	require.ErrorAs(t, err, &cerr)
 	require.NotEmpty(t, cerr.Details())
-	v, derr := cerr.Details()[0].Value()
+	v, derr := connectproto.UnmarshalErrorDetail(cerr.Details()[0])
 	require.NoError(t, derr)
 	br, ok := v.(*errdetails.BadRequest)
 	require.True(t, ok)
@@ -464,30 +460,30 @@ func fieldOf(t *testing.T, err error) string {
 func TestRPC_ReorderLessons_OK_PassesOrder(t *testing.T) {
 	e := newEnv(t, "lessons:write")
 	c := e.client(t, uuid.New())
-	course, err := c.CreateCourse(context.Background(), connect.NewRequest(&lessonsv1.CreateCourseRequest{Title: "c"}))
+	course, err := c.CreateCourse(context.Background(), &lessonsv1.CreateCourseRequest{Title: "c"})
 	require.NoError(t, err)
-	cid := course.Msg.GetCourse().GetId()
-	a, err := c.CreateLesson(context.Background(), connect.NewRequest(&lessonsv1.CreateLessonRequest{CourseId: cid, Title: "a"}))
+	cid := course.GetCourse().GetId()
+	a, err := c.CreateLesson(context.Background(), &lessonsv1.CreateLessonRequest{CourseId: cid, Title: "a"})
 	require.NoError(t, err)
-	b, err := c.CreateLesson(context.Background(), connect.NewRequest(&lessonsv1.CreateLessonRequest{CourseId: cid, Title: "b"}))
+	b, err := c.CreateLesson(context.Background(), &lessonsv1.CreateLessonRequest{CourseId: cid, Title: "b"})
 	require.NoError(t, err)
 
-	res, err := c.ReorderLessons(context.Background(), connect.NewRequest(&lessonsv1.ReorderLessonsRequest{
-		CourseId: cid, LessonIds: []string{b.Msg.GetLesson().GetId(), a.Msg.GetLesson().GetId()},
-	}))
+	res, err := c.ReorderLessons(context.Background(), &lessonsv1.ReorderLessonsRequest{
+		CourseId: cid, LessonIds: []string{b.GetLesson().GetId(), a.GetLesson().GetId()},
+	})
 	require.NoError(t, err)
-	require.Len(t, res.Msg.GetLessons(), 2)
-	assert.Equal(t, "b", res.Msg.GetLessons()[0].GetTitle())
-	assert.Equal(t, int32(1), res.Msg.GetLessons()[0].GetPosition())
+	require.Len(t, res.GetLessons(), 2)
+	assert.Equal(t, "b", res.GetLessons()[0].GetTitle())
+	assert.Equal(t, int32(1), res.GetLessons()[0].GetPosition())
 	assert.Len(t, e.repo.reorderIDs, 2)
 }
 
 func TestRPC_ReorderLessons_Duplicate_InvalidArgument(t *testing.T) {
 	e := newEnv(t, "lessons:write")
 	id := uuid.NewString()
-	_, err := e.client(t, uuid.New()).ReorderLessons(context.Background(), connect.NewRequest(&lessonsv1.ReorderLessonsRequest{
+	_, err := e.client(t, uuid.New()).ReorderLessons(context.Background(), &lessonsv1.ReorderLessonsRequest{
 		CourseId: uuid.NewString(), LessonIds: []string{id, id},
-	}))
+	})
 	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
 	assert.Equal(t, "lesson_ids", fieldOf(t, err))
 	assert.Nil(t, e.repo.reorderIDs, "repo must not be called")
@@ -495,9 +491,9 @@ func TestRPC_ReorderLessons_Duplicate_InvalidArgument(t *testing.T) {
 
 func TestRPC_ReorderLessons_BadLessonID_InvalidArgument(t *testing.T) {
 	e := newEnv(t, "lessons:write")
-	_, err := e.client(t, uuid.New()).ReorderLessons(context.Background(), connect.NewRequest(&lessonsv1.ReorderLessonsRequest{
+	_, err := e.client(t, uuid.New()).ReorderLessons(context.Background(), &lessonsv1.ReorderLessonsRequest{
 		CourseId: uuid.NewString(), LessonIds: []string{"nope"},
-	}))
+	})
 	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
 	assert.Equal(t, "lesson_ids", fieldOf(t, err))
 }
@@ -505,9 +501,9 @@ func TestRPC_ReorderLessons_BadLessonID_InvalidArgument(t *testing.T) {
 func TestRPC_ReorderLessons_Mismatch_InvalidArgument(t *testing.T) {
 	e := newEnv(t, "lessons:write")
 	e.repo.reorderErr = ErrLessonSetMismatch
-	_, err := e.client(t, uuid.New()).ReorderLessons(context.Background(), connect.NewRequest(&lessonsv1.ReorderLessonsRequest{
+	_, err := e.client(t, uuid.New()).ReorderLessons(context.Background(), &lessonsv1.ReorderLessonsRequest{
 		CourseId: uuid.NewString(), LessonIds: []string{uuid.NewString()},
-	}))
+	})
 	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
 	assert.Equal(t, "lesson_ids", fieldOf(t, err))
 }
@@ -541,14 +537,15 @@ func fastWatch(t *testing.T) {
 // cover streaming calls, not only unary ones.
 func TestRPC_WatchCourse_NoToken_Unauthenticated(t *testing.T) {
 	var buf syncBuf
-	e := newEnvWith(t, []connect.Interceptor{apphttp.RPCLog(slog.New(slog.NewJSONHandler(&buf, nil)))}, "lessons:write")
-	anon := lessonsv1connect.NewLessonsServiceClient(http.DefaultClient, e.srv.URL)
+	e := newEnvWith(t, []connect.ServerInterceptor{apphttp.RPCLog(slog.New(slog.NewJSONHandler(&buf, nil)))}, "lessons:write")
+	anon := newClient(http.DefaultClient, e.srv.URL, "")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	stream, err := anon.WatchCourse(ctx, connect.NewRequest(&lessonsv1.WatchCourseRequest{Id: uuid.NewString()}))
-	require.NoError(t, err)
-	assert.False(t, stream.Receive())
-	assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(stream.Err()))
+	stream, err := anon.WatchCourse(ctx, &lessonsv1.WatchCourseRequest{Id: uuid.NewString()})
+	if err == nil { // the error may surface on open or on the first Receive
+		_, err = stream.Receive()
+	}
+	assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
 	assert.Contains(t, buf.String(), `"procedure":"/lessons.v1.LessonsService/WatchCourse"`)
 	assert.Contains(t, buf.String(), `"code":"unauthenticated"`)
 }
@@ -558,10 +555,11 @@ func TestRPC_WatchCourse_UnknownCourse_NotFound(t *testing.T) {
 	e := newEnv(t, "lessons:write")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	stream, err := e.client(t, uuid.New()).WatchCourse(ctx, connect.NewRequest(&lessonsv1.WatchCourseRequest{Id: uuid.NewString()}))
-	require.NoError(t, err)
-	assert.False(t, stream.Receive())
-	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(stream.Err()))
+	stream, err := e.client(t, uuid.New()).WatchCourse(ctx, &lessonsv1.WatchCourseRequest{Id: uuid.NewString()})
+	if err == nil {
+		_, err = stream.Receive()
+	}
+	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
 }
 
 // TestRPC_WatchCourse_SnapshotThenChange_GRPC streams over native gRPC on
@@ -574,27 +572,29 @@ func TestRPC_WatchCourse_SnapshotThenChange_GRPC(t *testing.T) {
 	c := e.client(t, uid)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	course, err := c.CreateCourse(ctx, connect.NewRequest(&lessonsv1.CreateCourseRequest{Title: "watched"}))
+	course, err := c.CreateCourse(ctx, &lessonsv1.CreateCourseRequest{Title: "watched"})
 	require.NoError(t, err)
-	cid := course.Msg.GetCourse().GetId()
+	cid := course.GetCourse().GetId()
 
 	var cp http.Protocols
 	cp.SetUnencryptedHTTP2(true)
 	h2c := &http.Client{Transport: &http.Transport{Protocols: &cp}}
-	g := lessonsv1connect.NewLessonsServiceClient(h2c, e.srv.URL, connect.WithGRPC(), bearer(token(t, uid, time.Now().Add(time.Hour))))
-	stream, err := g.WatchCourse(ctx, connect.NewRequest(&lessonsv1.WatchCourseRequest{Id: cid}))
+	g := newClient(h2c, e.srv.URL, token(t, uid, time.Now().Add(time.Hour)), connecthttp.WithGRPC())
+	stream, err := g.WatchCourse(ctx, &lessonsv1.WatchCourseRequest{Id: cid})
 	require.NoError(t, err)
 
-	require.True(t, stream.Receive(), "first snapshot: %v", stream.Err())
-	assert.Equal(t, "watched", stream.Msg().GetCourse().GetTitle())
-	assert.Empty(t, stream.Msg().GetLessons())
+	first, err := stream.Receive()
+	require.NoError(t, err, "first snapshot")
+	assert.Equal(t, "watched", first.GetCourse().GetTitle())
+	assert.Empty(t, first.GetLessons())
 
-	_, err = c.CreateLesson(ctx, connect.NewRequest(&lessonsv1.CreateLessonRequest{CourseId: cid, Title: "new"}))
+	_, err = c.CreateLesson(ctx, &lessonsv1.CreateLessonRequest{CourseId: cid, Title: "new"})
 	require.NoError(t, err)
 	// An unchanged poll sends nothing, so the next message is the change.
-	require.True(t, stream.Receive(), "change: %v", stream.Err())
-	require.Len(t, stream.Msg().GetLessons(), 1)
-	assert.Equal(t, "new", stream.Msg().GetLessons()[0].GetTitle())
+	changed, err := stream.Receive()
+	require.NoError(t, err, "change")
+	require.Len(t, changed.GetLessons(), 1)
+	assert.Equal(t, "new", changed.GetLessons()[0].GetTitle())
 	require.NoError(t, stream.Close())
 }
 
@@ -608,16 +608,18 @@ func TestRPC_WatchCourse_KeepaliveResendsWhenIdle(t *testing.T) {
 	c := e.client(t, uuid.New())
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	course, err := c.CreateCourse(ctx, connect.NewRequest(&lessonsv1.CreateCourseRequest{Title: "idle"}))
+	course, err := c.CreateCourse(ctx, &lessonsv1.CreateCourseRequest{Title: "idle"})
 	require.NoError(t, err)
 
-	stream, err := c.WatchCourse(ctx, connect.NewRequest(&lessonsv1.WatchCourseRequest{Id: course.Msg.GetCourse().GetId()}))
+	stream, err := c.WatchCourse(ctx, &lessonsv1.WatchCourseRequest{Id: course.GetCourse().GetId()})
 	require.NoError(t, err)
-	require.True(t, stream.Receive(), "first snapshot: %v", stream.Err())
+	_, err = stream.Receive()
+	require.NoError(t, err, "first snapshot")
 	first := time.Now()
-	require.True(t, stream.Receive(), "keepalive: %v", stream.Err())
+	again, err := stream.Receive()
+	require.NoError(t, err, "keepalive")
 	assert.GreaterOrEqual(t, time.Since(first), 80*time.Millisecond, "keepalive came too early")
-	assert.Equal(t, "idle", stream.Msg().GetCourse().GetTitle())
+	assert.Equal(t, "idle", again.GetCourse().GetTitle())
 	require.NoError(t, stream.Close())
 }
 
@@ -689,11 +691,11 @@ func TestRPC_UpdateLesson_Branches(t *testing.T) {
 	e := newEnv(t, "lessons:write")
 	c := e.client(t, uuid.New())
 	ctx := context.Background()
-	course, err := c.CreateCourse(ctx, connect.NewRequest(&lessonsv1.CreateCourseRequest{Title: "c"}))
+	course, err := c.CreateCourse(ctx, &lessonsv1.CreateCourseRequest{Title: "c"})
 	require.NoError(t, err)
-	lesson, err := c.CreateLesson(ctx, connect.NewRequest(&lessonsv1.CreateLessonRequest{CourseId: course.Msg.GetCourse().GetId(), Title: "l"}))
+	lesson, err := c.CreateLesson(ctx, &lessonsv1.CreateLessonRequest{CourseId: course.GetCourse().GetId(), Title: "l"})
 	require.NoError(t, err)
-	id := lesson.Msg.GetLesson().GetId()
+	id := lesson.GetLesson().GetId()
 
 	rejected := []struct {
 		name  string
@@ -710,7 +712,7 @@ func TestRPC_UpdateLesson_Branches(t *testing.T) {
 	}
 	for _, tc := range rejected {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := c.UpdateLesson(ctx, connect.NewRequest(tc.req))
+			_, err := c.UpdateLesson(ctx, tc.req)
 			require.Equal(t, tc.code, connect.CodeOf(err), err)
 			if tc.field != "" {
 				assert.Equal(t, tc.field, fieldOf(t, err))
@@ -719,10 +721,10 @@ func TestRPC_UpdateLesson_Branches(t *testing.T) {
 	}
 
 	t.Run("every optional field passes through, cleaned", func(t *testing.T) {
-		_, err := c.UpdateLesson(ctx, connect.NewRequest(&lessonsv1.UpdateLessonRequest{
+		_, err := c.UpdateLesson(ctx, &lessonsv1.UpdateLessonRequest{
 			Id: id, Title: str("  Renamed  "), Url: str("  https://go.dev  "), Notes: str("  kept as is  "),
 			Status: st(lessonsv1.LessonStatus_LESSON_STATUS_IN_PROGRESS), Position: i32(0),
-		}))
+		})
 		require.NoError(t, err)
 		in := e.repo.updateLessonIn
 		require.NotNil(t, in.Title)
@@ -734,7 +736,7 @@ func TestRPC_UpdateLesson_Branches(t *testing.T) {
 	})
 
 	t.Run("unset fields stay nil", func(t *testing.T) {
-		_, err := c.UpdateLesson(ctx, connect.NewRequest(&lessonsv1.UpdateLessonRequest{Id: id}))
+		_, err := c.UpdateLesson(ctx, &lessonsv1.UpdateLessonRequest{Id: id})
 		require.NoError(t, err)
 		assert.Equal(t, UpdateLessonInput{}, e.repo.updateLessonIn)
 	})
@@ -744,8 +746,11 @@ func TestRPC_UpdateLesson_Branches(t *testing.T) {
 		e.repo.failWith = errors.New("db down")
 		e.repo.mu.Unlock()
 		t.Cleanup(func() { e.repo.mu.Lock(); e.repo.failWith = nil; e.repo.mu.Unlock() })
-		_, err := c.UpdateLesson(ctx, connect.NewRequest(&lessonsv1.UpdateLessonRequest{Id: id}))
+		_, err := c.UpdateLesson(ctx, &lessonsv1.UpdateLessonRequest{Id: id})
 		assert.Equal(t, connect.CodeInternal, connect.CodeOf(err))
+		var cerr *connect.Error
+		require.ErrorAs(t, err, &cerr)
+		assert.NotContains(t, cerr.Message(), "db down", "the database error must not reach the client")
 	})
 }
 
@@ -754,20 +759,20 @@ func TestRPC_UpdateCourse_Branches(t *testing.T) {
 	e := newEnv(t, "lessons:write")
 	c := e.client(t, uuid.New())
 	ctx := context.Background()
-	course, err := c.CreateCourse(ctx, connect.NewRequest(&lessonsv1.CreateCourseRequest{Title: "c"}))
+	course, err := c.CreateCourse(ctx, &lessonsv1.CreateCourseRequest{Title: "c"})
 	require.NoError(t, err)
-	id := course.Msg.GetCourse().GetId()
+	id := course.GetCourse().GetId()
 
-	_, err = c.UpdateCourse(ctx, connect.NewRequest(&lessonsv1.UpdateCourseRequest{Id: "nope"}))
+	_, err = c.UpdateCourse(ctx, &lessonsv1.UpdateCourseRequest{Id: "nope"})
 	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err), "bad id")
-	_, err = c.UpdateCourse(ctx, connect.NewRequest(&lessonsv1.UpdateCourseRequest{Id: id, Title: str(" ")}))
+	_, err = c.UpdateCourse(ctx, &lessonsv1.UpdateCourseRequest{Id: id, Title: str(" ")})
 	assert.Equal(t, "title", fieldOf(t, err), "blank title")
-	_, err = c.UpdateCourse(ctx, connect.NewRequest(&lessonsv1.UpdateCourseRequest{Id: uuid.NewString(), Provider: str("x")}))
+	_, err = c.UpdateCourse(ctx, &lessonsv1.UpdateCourseRequest{Id: uuid.NewString(), Provider: str("x")})
 	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err), "unknown course")
 
-	res, err := c.UpdateCourse(ctx, connect.NewRequest(&lessonsv1.UpdateCourseRequest{Id: id, Provider: str("  go.dev  "), Url: str(" https://go.dev ")}))
+	res, err := c.UpdateCourse(ctx, &lessonsv1.UpdateCourseRequest{Id: id, Provider: str("  go.dev  "), Url: str(" https://go.dev ")})
 	require.NoError(t, err)
-	assert.Equal(t, "go.dev", res.Msg.GetCourse().GetProvider())
+	assert.Equal(t, "go.dev", res.GetCourse().GetProvider())
 	assert.Nil(t, e.repo.updateCourseIn.Title, "title untouched when unset")
 	assert.Equal(t, "https://go.dev", *e.repo.updateCourseIn.URL)
 }
@@ -776,15 +781,42 @@ func TestRPC_DeleteLesson_Branches(t *testing.T) {
 	e := newEnv(t, "lessons:write")
 	c := e.client(t, uuid.New())
 	ctx := context.Background()
-	course, err := c.CreateCourse(ctx, connect.NewRequest(&lessonsv1.CreateCourseRequest{Title: "c"}))
+	course, err := c.CreateCourse(ctx, &lessonsv1.CreateCourseRequest{Title: "c"})
 	require.NoError(t, err)
-	lesson, err := c.CreateLesson(ctx, connect.NewRequest(&lessonsv1.CreateLessonRequest{CourseId: course.Msg.GetCourse().GetId(), Title: "l"}))
+	lesson, err := c.CreateLesson(ctx, &lessonsv1.CreateLessonRequest{CourseId: course.GetCourse().GetId(), Title: "l"})
 	require.NoError(t, err)
 
-	_, err = c.DeleteLesson(ctx, connect.NewRequest(&lessonsv1.DeleteLessonRequest{Id: "nope"}))
+	_, err = c.DeleteLesson(ctx, &lessonsv1.DeleteLessonRequest{Id: "nope"})
 	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
-	_, err = c.DeleteLesson(ctx, connect.NewRequest(&lessonsv1.DeleteLessonRequest{Id: lesson.Msg.GetLesson().GetId()}))
+	_, err = c.DeleteLesson(ctx, &lessonsv1.DeleteLessonRequest{Id: lesson.GetLesson().GetId()})
 	require.NoError(t, err)
-	_, err = c.DeleteLesson(ctx, connect.NewRequest(&lessonsv1.DeleteLessonRequest{Id: lesson.Msg.GetLesson().GetId()}))
+	_, err = c.DeleteLesson(ctx, &lessonsv1.DeleteLessonRequest{Id: lesson.GetLesson().GetId()})
 	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err), "second delete")
+}
+
+// TestRPC_InternalError_CauseLoggedNotSent: v2 sends only the fixed message;
+// the cause (here the repository error) reaches the server log via RPCLog.
+func TestRPC_InternalError_CauseLoggedNotSent(t *testing.T) {
+	var buf syncBuf
+	e := newEnvWith(t, []connect.ServerInterceptor{apphttp.RPCLog(slog.New(slog.NewJSONHandler(&buf, nil)))}, "lessons:write")
+	c := e.client(t, uuid.New())
+	e.repo.mu.Lock()
+	e.repo.failWith = errors.New("pg: connection refused at 10.0.0.7")
+	e.repo.mu.Unlock()
+
+	_, err := c.UpdateLesson(context.Background(), &lessonsv1.UpdateLessonRequest{Id: uuid.NewString()})
+	var cerr *connect.Error
+	require.ErrorAs(t, err, &cerr)
+	assert.Equal(t, connect.CodeInternal, cerr.Code())
+	assert.NotContains(t, cerr.Message(), "10.0.0.7")
+	assert.Contains(t, buf.String(), `"cause":"pg: connection refused at 10.0.0.7"`)
+}
+
+// TestRPC_AuthBeforeBody: a v2 interceptor runs before the body is read, so a
+// token-less oversized call is refused for the token, not the size.
+func TestRPC_AuthBeforeBody(t *testing.T) {
+	e := newEnv(t, "lessons:write")
+	huge := strings.Repeat("x", maxRequestBytes+1)
+	_, err := newClient(http.DefaultClient, e.srv.URL, "").CreateCourse(context.Background(), &lessonsv1.CreateCourseRequest{Title: "big", Notes: huge})
+	assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
 }

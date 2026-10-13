@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
+	"connectrpc.com/connect/v2/connectproto"
 	"github.com/google/uuid"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/protobuf/proto"
@@ -49,27 +51,28 @@ var _ lessonsv1connect.LessonsServiceHandler = (*Handler)(nil)
 // NewHandler constructs a Handler.
 func NewHandler(repo AdminWriter) *Handler { return &Handler{repo: repo} }
 
-// NewConnectHandler returns the mount path and http.Handler for the service
-// with the options every deployment needs: the given interceptors (auth), a
-// request-size cap and panic recovery. main.go and the tests share it so the
-// tested handler is the served one.
-func NewConnectHandler(repo AdminWriter, interceptors ...connect.Interceptor) (string, http.Handler) {
-	return lessonsv1connect.NewLessonsServiceHandler(
-		NewHandler(repo),
-		connect.WithInterceptors(interceptors...),
-		connect.WithReadMaxBytes(maxRequestBytes),
-		connect.WithRecover(func(_ context.Context, _ connect.Spec, _ http.Header, p any) error {
-			return connect.NewError(connect.CodeInternal, fmt.Errorf("lessons: panic: %v", p))
-		}),
-	)
+// NewServer registers the lessons service on a Connect server. interceptors
+// run outermost first (cmd/api passes RPCLog, then RPCAuth); RPCRecover is
+// always added innermost, so a handler panic becomes CodeInternal and the
+// outer interceptors still see and log it.
+func NewServer(repo AdminWriter, interceptors ...connect.ServerInterceptor) *connect.Server {
+	srv := connect.NewServer(append(slices.Clone(interceptors), apphttp.RPCRecover())...)
+	lessonsv1connect.RegisterLessonsServiceHandler(srv, NewHandler(repo))
+	return srv
+}
+
+// Mount serves server over HTTP (Connect, gRPC and gRPC-Web) on mux with the
+// request size cap.
+func Mount(mux connecthttp.ServeMux, server *connect.Server) {
+	connecthttp.Mount(mux, server, connecthttp.WithReadMaxBytes(maxRequestBytes))
 }
 
 // ListCourses returns a page of courses with derived progress.
-func (h *Handler) ListCourses(ctx context.Context, req *connect.Request[lessonsv1.ListCoursesRequest]) (*connect.Response[lessonsv1.ListCoursesResponse], error) {
+func (h *Handler) ListCourses(ctx context.Context, req *lessonsv1.ListCoursesRequest) (*lessonsv1.ListCoursesResponse, error) {
 	courses, total, err := h.repo.ListCourses(ctx, ListFilter{
-		Page:    int(req.Msg.GetPage()),
-		PerPage: int(req.Msg.GetPerPage()),
-		Q:       req.Msg.GetQ(),
+		Page:    int(req.GetPage()),
+		PerPage: int(req.GetPerPage()),
+		Q:       req.GetQ(),
 	})
 	if err != nil {
 		return nil, mapErr(err)
@@ -78,12 +81,12 @@ func (h *Handler) ListCourses(ctx context.Context, req *connect.Request[lessonsv
 	for _, c := range courses {
 		out = append(out, courseToProto(c))
 	}
-	return connect.NewResponse(&lessonsv1.ListCoursesResponse{Courses: out, Total: int32(total)}), nil
+	return &lessonsv1.ListCoursesResponse{Courses: out, Total: int32(total)}, nil
 }
 
 // GetCourse returns one course and its lessons ordered by position.
-func (h *Handler) GetCourse(ctx context.Context, req *connect.Request[lessonsv1.GetCourseRequest]) (*connect.Response[lessonsv1.GetCourseResponse], error) {
-	id, err := parseID(req.Msg.GetId())
+func (h *Handler) GetCourse(ctx context.Context, req *lessonsv1.GetCourseRequest) (*lessonsv1.GetCourseResponse, error) {
+	id, err := parseID(req.GetId())
 	if err != nil {
 		return nil, err
 	}
@@ -95,42 +98,42 @@ func (h *Handler) GetCourse(ctx context.Context, req *connect.Request[lessonsv1.
 	for _, l := range lessons {
 		out = append(out, lessonToProto(l))
 	}
-	return connect.NewResponse(&lessonsv1.GetCourseResponse{Course: courseToProto(c), Lessons: out}), nil
+	return &lessonsv1.GetCourseResponse{Course: courseToProto(c), Lessons: out}, nil
 }
 
 // CreateCourse validates the title and records the caller as creator.
-func (h *Handler) CreateCourse(ctx context.Context, req *connect.Request[lessonsv1.CreateCourseRequest]) (*connect.Response[lessonsv1.CreateCourseResponse], error) {
-	title, err := cleanTitle(req.Msg.GetTitle())
+func (h *Handler) CreateCourse(ctx context.Context, req *lessonsv1.CreateCourseRequest) (*lessonsv1.CreateCourseResponse, error) {
+	title, err := cleanTitle(req.GetTitle())
 	if err != nil {
 		return nil, err
 	}
 	uid, _ := apphttp.UserIDFrom(ctx)
 	c, err := h.repo.CreateCourse(ctx, CreateCourseInput{
 		Title:     title,
-		URL:       strings.TrimSpace(req.Msg.GetUrl()),
-		Provider:  strings.TrimSpace(req.Msg.GetProvider()),
-		Notes:     req.Msg.GetNotes(),
+		URL:       strings.TrimSpace(req.GetUrl()),
+		Provider:  strings.TrimSpace(req.GetProvider()),
+		Notes:     req.GetNotes(),
 		CreatedBy: uid,
 	})
 	if err != nil {
 		return nil, mapErr(err)
 	}
-	return connect.NewResponse(&lessonsv1.CreateCourseResponse{Course: courseToProto(c)}), nil
+	return &lessonsv1.CreateCourseResponse{Course: courseToProto(c)}, nil
 }
 
 // UpdateCourse applies the optional fields that were set.
-func (h *Handler) UpdateCourse(ctx context.Context, req *connect.Request[lessonsv1.UpdateCourseRequest]) (*connect.Response[lessonsv1.UpdateCourseResponse], error) {
-	id, err := parseID(req.Msg.GetId())
+func (h *Handler) UpdateCourse(ctx context.Context, req *lessonsv1.UpdateCourseRequest) (*lessonsv1.UpdateCourseResponse, error) {
+	id, err := parseID(req.GetId())
 	if err != nil {
 		return nil, err
 	}
 	in := UpdateCourseInput{
-		URL:      trimmed(req.Msg.Url),
-		Provider: trimmed(req.Msg.Provider),
-		Notes:    req.Msg.Notes,
+		URL:      trimmed(req.Url),
+		Provider: trimmed(req.Provider),
+		Notes:    req.Notes,
 	}
-	if req.Msg.Title != nil {
-		title, err := cleanTitle(*req.Msg.Title)
+	if req.Title != nil {
+		title, err := cleanTitle(*req.Title)
 		if err != nil {
 			return nil, err
 		}
@@ -140,101 +143,101 @@ func (h *Handler) UpdateCourse(ctx context.Context, req *connect.Request[lessons
 	if err != nil {
 		return nil, mapErr(err)
 	}
-	return connect.NewResponse(&lessonsv1.UpdateCourseResponse{Course: courseToProto(c)}), nil
+	return &lessonsv1.UpdateCourseResponse{Course: courseToProto(c)}, nil
 }
 
 // DeleteCourse removes a course and its lessons.
-func (h *Handler) DeleteCourse(ctx context.Context, req *connect.Request[lessonsv1.DeleteCourseRequest]) (*connect.Response[lessonsv1.DeleteCourseResponse], error) {
-	id, err := parseID(req.Msg.GetId())
+func (h *Handler) DeleteCourse(ctx context.Context, req *lessonsv1.DeleteCourseRequest) (*lessonsv1.DeleteCourseResponse, error) {
+	id, err := parseID(req.GetId())
 	if err != nil {
 		return nil, err
 	}
 	if err := h.repo.DeleteCourse(ctx, id); err != nil {
 		return nil, mapErr(err)
 	}
-	return connect.NewResponse(&lessonsv1.DeleteCourseResponse{}), nil
+	return &lessonsv1.DeleteCourseResponse{}, nil
 }
 
 // CreateLesson appends a lesson to a course.
-func (h *Handler) CreateLesson(ctx context.Context, req *connect.Request[lessonsv1.CreateLessonRequest]) (*connect.Response[lessonsv1.CreateLessonResponse], error) {
-	courseID, err := parseID(req.Msg.GetCourseId())
+func (h *Handler) CreateLesson(ctx context.Context, req *lessonsv1.CreateLessonRequest) (*lessonsv1.CreateLessonResponse, error) {
+	courseID, err := parseID(req.GetCourseId())
 	if err != nil {
 		return nil, err
 	}
-	title, err := cleanTitle(req.Msg.GetTitle())
+	title, err := cleanTitle(req.GetTitle())
 	if err != nil {
 		return nil, err
 	}
 	l, err := h.repo.CreateLesson(ctx, CreateLessonInput{
 		CourseID: courseID,
 		Title:    title,
-		URL:      strings.TrimSpace(req.Msg.GetUrl()),
-		Notes:    req.Msg.GetNotes(),
+		URL:      strings.TrimSpace(req.GetUrl()),
+		Notes:    req.GetNotes(),
 	})
 	if err != nil {
 		return nil, mapErr(err)
 	}
-	return connect.NewResponse(&lessonsv1.CreateLessonResponse{Lesson: lessonToProto(l)}), nil
+	return &lessonsv1.CreateLessonResponse{Lesson: lessonToProto(l)}, nil
 }
 
 // UpdateLesson applies the optional fields that were set; status drives completed_at.
-func (h *Handler) UpdateLesson(ctx context.Context, req *connect.Request[lessonsv1.UpdateLessonRequest]) (*connect.Response[lessonsv1.UpdateLessonResponse], error) {
-	id, err := parseID(req.Msg.GetId())
+func (h *Handler) UpdateLesson(ctx context.Context, req *lessonsv1.UpdateLessonRequest) (*lessonsv1.UpdateLessonResponse, error) {
+	id, err := parseID(req.GetId())
 	if err != nil {
 		return nil, err
 	}
 	in := UpdateLessonInput{
-		URL:   trimmed(req.Msg.Url),
-		Notes: req.Msg.Notes,
+		URL:   trimmed(req.Url),
+		Notes: req.Notes,
 	}
-	if req.Msg.Title != nil {
-		title, err := cleanTitle(*req.Msg.Title)
+	if req.Title != nil {
+		title, err := cleanTitle(*req.Title)
 		if err != nil {
 			return nil, err
 		}
 		in.Title = &title
 	}
-	if req.Msg.Status != nil {
-		st, ok := statusFromProto(*req.Msg.Status)
+	if req.Status != nil {
+		st, ok := statusFromProto(*req.Status)
 		if !ok {
 			return nil, invalidField("status", "status must be todo, in_progress or done")
 		}
 		in.Status = &st
 	}
-	if req.Msg.Position != nil {
-		if *req.Msg.Position < 0 {
+	if req.Position != nil {
+		if *req.Position < 0 {
 			return nil, invalidField("position", "position must be >= 0")
 		}
-		pos := int(*req.Msg.Position)
+		pos := int(*req.Position)
 		in.Position = &pos
 	}
 	l, err := h.repo.UpdateLesson(ctx, id, in)
 	if err != nil {
 		return nil, mapErr(err)
 	}
-	return connect.NewResponse(&lessonsv1.UpdateLessonResponse{Lesson: lessonToProto(l)}), nil
+	return &lessonsv1.UpdateLessonResponse{Lesson: lessonToProto(l)}, nil
 }
 
 // DeleteLesson removes one lesson.
-func (h *Handler) DeleteLesson(ctx context.Context, req *connect.Request[lessonsv1.DeleteLessonRequest]) (*connect.Response[lessonsv1.DeleteLessonResponse], error) {
-	id, err := parseID(req.Msg.GetId())
+func (h *Handler) DeleteLesson(ctx context.Context, req *lessonsv1.DeleteLessonRequest) (*lessonsv1.DeleteLessonResponse, error) {
+	id, err := parseID(req.GetId())
 	if err != nil {
 		return nil, err
 	}
 	if err := h.repo.DeleteLesson(ctx, id); err != nil {
 		return nil, mapErr(err)
 	}
-	return connect.NewResponse(&lessonsv1.DeleteLessonResponse{}), nil
+	return &lessonsv1.DeleteLessonResponse{}, nil
 }
 
 // ReorderLessons sets the course's lesson order. lesson_ids must name every
 // lesson of the course exactly once; the repository enforces the set match.
-func (h *Handler) ReorderLessons(ctx context.Context, req *connect.Request[lessonsv1.ReorderLessonsRequest]) (*connect.Response[lessonsv1.ReorderLessonsResponse], error) {
-	courseID, err := parseID(req.Msg.GetCourseId())
+func (h *Handler) ReorderLessons(ctx context.Context, req *lessonsv1.ReorderLessonsRequest) (*lessonsv1.ReorderLessonsResponse, error) {
+	courseID, err := parseID(req.GetCourseId())
 	if err != nil {
 		return nil, err
 	}
-	raw := req.Msg.GetLessonIds()
+	raw := req.GetLessonIds()
 	ids := make([]uuid.UUID, 0, len(raw))
 	seen := make(map[uuid.UUID]bool, len(raw))
 	for _, s := range raw {
@@ -259,7 +262,7 @@ func (h *Handler) ReorderLessons(ctx context.Context, req *connect.Request[lesso
 	for _, l := range lessons {
 		out = append(out, lessonToProto(l))
 	}
-	return connect.NewResponse(&lessonsv1.ReorderLessonsResponse{Lessons: out}), nil
+	return &lessonsv1.ReorderLessonsResponse{Lessons: out}, nil
 }
 
 // WatchCourse streams the course with its lessons: one snapshot on subscribe,
@@ -269,8 +272,8 @@ func (h *Handler) ReorderLessons(ctx context.Context, req *connect.Request[lesso
 // snapshot is re-sent after watchKeepalive so idle streams survive the edge.
 // ponytail: polling, one GetCourse per watcher per tick; switch to
 // LISTEN/NOTIFY if watchers ever outnumber a couple of admin tabs.
-func (h *Handler) WatchCourse(ctx context.Context, req *connect.Request[lessonsv1.WatchCourseRequest], stream *connect.ServerStream[lessonsv1.WatchCourseResponse]) error {
-	id, err := parseID(req.Msg.GetId())
+func (h *Handler) WatchCourse(ctx context.Context, req *lessonsv1.WatchCourseRequest, stream lessonsv1connect.LessonsServiceWatchCourseServerStream) error {
+	id, err := parseID(req.GetId())
 	if err != nil {
 		return err
 	}
@@ -310,27 +313,28 @@ func (h *Handler) WatchCourse(ctx context.Context, req *connect.Request[lessonsv
 // --- helpers ---
 
 func invalid(msg string) error {
-	return connect.NewError(connect.CodeInvalidArgument, errors.New(msg))
+	return connect.NewError(connect.CodeInvalidArgument, msg)
 }
 
 // invalidField is invalid plus a google.rpc.BadRequest detail naming the
 // field, so a client can put the message next to the input, not in a toast.
 func invalidField(field, msg string) error {
-	cerr := connect.NewError(connect.CodeInvalidArgument, errors.New(msg))
-	detail, err := connect.NewErrorDetail(&errdetails.BadRequest{
+	cerr := connect.NewError(connect.CodeInvalidArgument, msg)
+	detail, err := connectproto.NewErrorDetail(&errdetails.BadRequest{
 		FieldViolations: []*errdetails.BadRequest_FieldViolation{{Field: field, Description: msg}},
 	})
 	if err == nil {
-		cerr.AddDetail(detail)
+		cerr = cerr.WithDetail(detail)
 	}
 	return cerr
 }
 
 func mapErr(err error) error {
 	if errors.Is(err, ErrNotFound) {
-		return connect.NewError(connect.CodeNotFound, err)
+		return connect.NewError(connect.CodeNotFound, "not found").WithCause(err)
 	}
-	return connect.NewError(connect.CodeInternal, err)
+	// The cause (often a raw pgx error) stays server-side; RPCLog logs it.
+	return connect.NewError(connect.CodeInternal, "internal error").WithCause(err)
 }
 
 func parseID(s string) (uuid.UUID, error) {

@@ -5,374 +5,465 @@
 package lessonsv1connect
 
 import (
-	connect "connectrpc.com/connect"
+	connect "connectrpc.com/connect/v2"
 	context "context"
-	errors "errors"
 	v1 "github.com/quocdaijr/qdjr-admin/apps/api/internal/gen/lessons/v1"
-	http "net/http"
-	strings "strings"
+	sync "sync"
 )
-
-// This is a compile-time assertion to ensure that this generated file and the connect package are
-// compatible. If you get a compiler error that this constant is not defined, this code was
-// generated with a version of connect newer than the one compiled into your binary. You can fix the
-// problem by either regenerating this code with an older version of connect or updating the connect
-// version compiled into your binary.
-const _ = connect.IsAtLeastVersion1_13_0
 
 const (
 	// LessonsServiceName is the fully-qualified name of the LessonsService service.
 	LessonsServiceName = "lessons.v1.LessonsService"
 )
 
-// These constants are the fully-qualified names of the RPCs defined in this package. They're
-// exposed at runtime as Spec.Procedure and as the final two segments of the HTTP route.
+// These constants are the procedure names of the RPCs defined in this package. They're exposed at
+// runtime as Spec.Procedure and as the final two segments of the HTTP route.
 //
 // Note that these are different from the fully-qualified method names used by
 // google.golang.org/protobuf/reflect/protoreflect. To convert from these constants to
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// LessonsServiceListCoursesProcedure is the fully-qualified name of the LessonsService's
-	// ListCourses RPC.
+	// LessonsServiceListCoursesProcedure is the procedure name of the LessonsService's ListCourses RPC.
 	LessonsServiceListCoursesProcedure = "/lessons.v1.LessonsService/ListCourses"
-	// LessonsServiceGetCourseProcedure is the fully-qualified name of the LessonsService's GetCourse
-	// RPC.
+	// LessonsServiceGetCourseProcedure is the procedure name of the LessonsService's GetCourse RPC.
 	LessonsServiceGetCourseProcedure = "/lessons.v1.LessonsService/GetCourse"
-	// LessonsServiceCreateCourseProcedure is the fully-qualified name of the LessonsService's
-	// CreateCourse RPC.
+	// LessonsServiceCreateCourseProcedure is the procedure name of the LessonsService's CreateCourse
+	// RPC.
 	LessonsServiceCreateCourseProcedure = "/lessons.v1.LessonsService/CreateCourse"
-	// LessonsServiceUpdateCourseProcedure is the fully-qualified name of the LessonsService's
-	// UpdateCourse RPC.
+	// LessonsServiceUpdateCourseProcedure is the procedure name of the LessonsService's UpdateCourse
+	// RPC.
 	LessonsServiceUpdateCourseProcedure = "/lessons.v1.LessonsService/UpdateCourse"
-	// LessonsServiceDeleteCourseProcedure is the fully-qualified name of the LessonsService's
-	// DeleteCourse RPC.
+	// LessonsServiceDeleteCourseProcedure is the procedure name of the LessonsService's DeleteCourse
+	// RPC.
 	LessonsServiceDeleteCourseProcedure = "/lessons.v1.LessonsService/DeleteCourse"
-	// LessonsServiceCreateLessonProcedure is the fully-qualified name of the LessonsService's
-	// CreateLesson RPC.
+	// LessonsServiceCreateLessonProcedure is the procedure name of the LessonsService's CreateLesson
+	// RPC.
 	LessonsServiceCreateLessonProcedure = "/lessons.v1.LessonsService/CreateLesson"
-	// LessonsServiceUpdateLessonProcedure is the fully-qualified name of the LessonsService's
-	// UpdateLesson RPC.
+	// LessonsServiceUpdateLessonProcedure is the procedure name of the LessonsService's UpdateLesson
+	// RPC.
 	LessonsServiceUpdateLessonProcedure = "/lessons.v1.LessonsService/UpdateLesson"
-	// LessonsServiceDeleteLessonProcedure is the fully-qualified name of the LessonsService's
-	// DeleteLesson RPC.
+	// LessonsServiceDeleteLessonProcedure is the procedure name of the LessonsService's DeleteLesson
+	// RPC.
 	LessonsServiceDeleteLessonProcedure = "/lessons.v1.LessonsService/DeleteLesson"
-	// LessonsServiceReorderLessonsProcedure is the fully-qualified name of the LessonsService's
+	// LessonsServiceReorderLessonsProcedure is the procedure name of the LessonsService's
 	// ReorderLessons RPC.
 	LessonsServiceReorderLessonsProcedure = "/lessons.v1.LessonsService/ReorderLessons"
-	// LessonsServiceWatchCourseProcedure is the fully-qualified name of the LessonsService's
-	// WatchCourse RPC.
+	// LessonsServiceWatchCourseProcedure is the procedure name of the LessonsService's WatchCourse RPC.
 	LessonsServiceWatchCourseProcedure = "/lessons.v1.LessonsService/WatchCourse"
+)
+
+var (
+	lessonsServiceListCoursesSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_lessons_v1_lessons_proto.Services().ByName("LessonsService").Methods().ByName("ListCourses"),
+			Procedure:  LessonsServiceListCoursesProcedure,
+		}
+	})
+	lessonsServiceGetCourseSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_lessons_v1_lessons_proto.Services().ByName("LessonsService").Methods().ByName("GetCourse"),
+			Procedure:  LessonsServiceGetCourseProcedure,
+		}
+	})
+	lessonsServiceCreateCourseSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_lessons_v1_lessons_proto.Services().ByName("LessonsService").Methods().ByName("CreateCourse"),
+			Procedure:  LessonsServiceCreateCourseProcedure,
+		}
+	})
+	lessonsServiceUpdateCourseSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_lessons_v1_lessons_proto.Services().ByName("LessonsService").Methods().ByName("UpdateCourse"),
+			Procedure:  LessonsServiceUpdateCourseProcedure,
+		}
+	})
+	lessonsServiceDeleteCourseSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_lessons_v1_lessons_proto.Services().ByName("LessonsService").Methods().ByName("DeleteCourse"),
+			Procedure:  LessonsServiceDeleteCourseProcedure,
+		}
+	})
+	lessonsServiceCreateLessonSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_lessons_v1_lessons_proto.Services().ByName("LessonsService").Methods().ByName("CreateLesson"),
+			Procedure:  LessonsServiceCreateLessonProcedure,
+		}
+	})
+	lessonsServiceUpdateLessonSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_lessons_v1_lessons_proto.Services().ByName("LessonsService").Methods().ByName("UpdateLesson"),
+			Procedure:  LessonsServiceUpdateLessonProcedure,
+		}
+	})
+	lessonsServiceDeleteLessonSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_lessons_v1_lessons_proto.Services().ByName("LessonsService").Methods().ByName("DeleteLesson"),
+			Procedure:  LessonsServiceDeleteLessonProcedure,
+		}
+	})
+	lessonsServiceReorderLessonsSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeUnary,
+			Schema:     v1.File_lessons_v1_lessons_proto.Services().ByName("LessonsService").Methods().ByName("ReorderLessons"),
+			Procedure:  LessonsServiceReorderLessonsProcedure,
+		}
+	})
+	lessonsServiceWatchCourseSpec = sync.OnceValue(func() connect.Spec {
+		return connect.Spec{
+			StreamType: connect.StreamTypeServer,
+			Schema:     v1.File_lessons_v1_lessons_proto.Services().ByName("LessonsService").Methods().ByName("WatchCourse"),
+			Procedure:  LessonsServiceWatchCourseProcedure,
+		}
+	})
 )
 
 // LessonsServiceClient is a client for the lessons.v1.LessonsService service.
 type LessonsServiceClient interface {
-	ListCourses(context.Context, *connect.Request[v1.ListCoursesRequest]) (*connect.Response[v1.ListCoursesResponse], error)
-	GetCourse(context.Context, *connect.Request[v1.GetCourseRequest]) (*connect.Response[v1.GetCourseResponse], error)
-	CreateCourse(context.Context, *connect.Request[v1.CreateCourseRequest]) (*connect.Response[v1.CreateCourseResponse], error)
-	UpdateCourse(context.Context, *connect.Request[v1.UpdateCourseRequest]) (*connect.Response[v1.UpdateCourseResponse], error)
-	DeleteCourse(context.Context, *connect.Request[v1.DeleteCourseRequest]) (*connect.Response[v1.DeleteCourseResponse], error)
-	CreateLesson(context.Context, *connect.Request[v1.CreateLessonRequest]) (*connect.Response[v1.CreateLessonResponse], error)
-	UpdateLesson(context.Context, *connect.Request[v1.UpdateLessonRequest]) (*connect.Response[v1.UpdateLessonResponse], error)
-	DeleteLesson(context.Context, *connect.Request[v1.DeleteLessonRequest]) (*connect.Response[v1.DeleteLessonResponse], error)
-	ReorderLessons(context.Context, *connect.Request[v1.ReorderLessonsRequest]) (*connect.Response[v1.ReorderLessonsResponse], error)
+	ListCourses(context.Context, *v1.ListCoursesRequest) (*v1.ListCoursesResponse, error)
+	GetCourse(context.Context, *v1.GetCourseRequest) (*v1.GetCourseResponse, error)
+	CreateCourse(context.Context, *v1.CreateCourseRequest) (*v1.CreateCourseResponse, error)
+	UpdateCourse(context.Context, *v1.UpdateCourseRequest) (*v1.UpdateCourseResponse, error)
+	DeleteCourse(context.Context, *v1.DeleteCourseRequest) (*v1.DeleteCourseResponse, error)
+	CreateLesson(context.Context, *v1.CreateLessonRequest) (*v1.CreateLessonResponse, error)
+	UpdateLesson(context.Context, *v1.UpdateLessonRequest) (*v1.UpdateLessonResponse, error)
+	DeleteLesson(context.Context, *v1.DeleteLessonRequest) (*v1.DeleteLessonResponse, error)
+	ReorderLessons(context.Context, *v1.ReorderLessonsRequest) (*v1.ReorderLessonsResponse, error)
 	// Server-streaming: a snapshot on subscribe, then one each time the course
 	// or its lessons change, and the unchanged snapshot again after 30s of
 	// silence (the production edge drops HTTP/2 streams idle for 60s). gRPC
 	// needs HTTP/2 end to end; the Connect protocol also streams over HTTP/1.1.
-	WatchCourse(context.Context, *connect.Request[v1.WatchCourseRequest]) (*connect.ServerStreamForClient[v1.WatchCourseResponse], error)
+	WatchCourse(context.Context, *v1.WatchCourseRequest) (LessonsServiceWatchCourseClientStream, error)
 }
 
-// NewLessonsServiceClient constructs a client for the lessons.v1.LessonsService service. By
-// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
-// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
-// connect.WithGRPC() or connect.WithGRPCWeb() options.
-//
-// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
-// http://api.acme.com or https://acme.com/grpc).
-func NewLessonsServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) LessonsServiceClient {
-	baseURL = strings.TrimRight(baseURL, "/")
-	lessonsServiceMethods := v1.File_lessons_v1_lessons_proto.Services().ByName("LessonsService").Methods()
-	return &lessonsServiceClient{
-		listCourses: connect.NewClient[v1.ListCoursesRequest, v1.ListCoursesResponse](
-			httpClient,
-			baseURL+LessonsServiceListCoursesProcedure,
-			connect.WithSchema(lessonsServiceMethods.ByName("ListCourses")),
-			connect.WithClientOptions(opts...),
-		),
-		getCourse: connect.NewClient[v1.GetCourseRequest, v1.GetCourseResponse](
-			httpClient,
-			baseURL+LessonsServiceGetCourseProcedure,
-			connect.WithSchema(lessonsServiceMethods.ByName("GetCourse")),
-			connect.WithClientOptions(opts...),
-		),
-		createCourse: connect.NewClient[v1.CreateCourseRequest, v1.CreateCourseResponse](
-			httpClient,
-			baseURL+LessonsServiceCreateCourseProcedure,
-			connect.WithSchema(lessonsServiceMethods.ByName("CreateCourse")),
-			connect.WithClientOptions(opts...),
-		),
-		updateCourse: connect.NewClient[v1.UpdateCourseRequest, v1.UpdateCourseResponse](
-			httpClient,
-			baseURL+LessonsServiceUpdateCourseProcedure,
-			connect.WithSchema(lessonsServiceMethods.ByName("UpdateCourse")),
-			connect.WithClientOptions(opts...),
-		),
-		deleteCourse: connect.NewClient[v1.DeleteCourseRequest, v1.DeleteCourseResponse](
-			httpClient,
-			baseURL+LessonsServiceDeleteCourseProcedure,
-			connect.WithSchema(lessonsServiceMethods.ByName("DeleteCourse")),
-			connect.WithClientOptions(opts...),
-		),
-		createLesson: connect.NewClient[v1.CreateLessonRequest, v1.CreateLessonResponse](
-			httpClient,
-			baseURL+LessonsServiceCreateLessonProcedure,
-			connect.WithSchema(lessonsServiceMethods.ByName("CreateLesson")),
-			connect.WithClientOptions(opts...),
-		),
-		updateLesson: connect.NewClient[v1.UpdateLessonRequest, v1.UpdateLessonResponse](
-			httpClient,
-			baseURL+LessonsServiceUpdateLessonProcedure,
-			connect.WithSchema(lessonsServiceMethods.ByName("UpdateLesson")),
-			connect.WithClientOptions(opts...),
-		),
-		deleteLesson: connect.NewClient[v1.DeleteLessonRequest, v1.DeleteLessonResponse](
-			httpClient,
-			baseURL+LessonsServiceDeleteLessonProcedure,
-			connect.WithSchema(lessonsServiceMethods.ByName("DeleteLesson")),
-			connect.WithClientOptions(opts...),
-		),
-		reorderLessons: connect.NewClient[v1.ReorderLessonsRequest, v1.ReorderLessonsResponse](
-			httpClient,
-			baseURL+LessonsServiceReorderLessonsProcedure,
-			connect.WithSchema(lessonsServiceMethods.ByName("ReorderLessons")),
-			connect.WithClientOptions(opts...),
-		),
-		watchCourse: connect.NewClient[v1.WatchCourseRequest, v1.WatchCourseResponse](
-			httpClient,
-			baseURL+LessonsServiceWatchCourseProcedure,
-			connect.WithSchema(lessonsServiceMethods.ByName("WatchCourse")),
-			connect.WithClientOptions(opts...),
-		),
+// NewLessonsServiceClient constructs a client for the lessons.v1.LessonsService service. Multiple
+// service clients may share a single connect.Client.
+func NewLessonsServiceClient(client *connect.Client) LessonsServiceClient {
+	return &lessonsServiceClient{client: client}
+}
+
+// LessonsServiceWatchCourseClientStream is the client stream for the LessonsService's WatchCourse
+// RPC.
+type LessonsServiceWatchCourseClientStream struct {
+	stream connect.ClientStream
+}
+
+// Receive returns the next response message from the server.
+func (s LessonsServiceWatchCourseClientStream) Receive() (*v1.WatchCourseResponse, error) {
+	var res v1.WatchCourseResponse
+	if err := s.stream.Receive(&res); err != nil {
+		return nil, err
 	}
+	return &res, nil
 }
 
-// lessonsServiceClient implements LessonsServiceClient.
-type lessonsServiceClient struct {
-	listCourses    *connect.Client[v1.ListCoursesRequest, v1.ListCoursesResponse]
-	getCourse      *connect.Client[v1.GetCourseRequest, v1.GetCourseResponse]
-	createCourse   *connect.Client[v1.CreateCourseRequest, v1.CreateCourseResponse]
-	updateCourse   *connect.Client[v1.UpdateCourseRequest, v1.UpdateCourseResponse]
-	deleteCourse   *connect.Client[v1.DeleteCourseRequest, v1.DeleteCourseResponse]
-	createLesson   *connect.Client[v1.CreateLessonRequest, v1.CreateLessonResponse]
-	updateLesson   *connect.Client[v1.UpdateLessonRequest, v1.UpdateLessonResponse]
-	deleteLesson   *connect.Client[v1.DeleteLessonRequest, v1.DeleteLessonResponse]
-	reorderLessons *connect.Client[v1.ReorderLessonsRequest, v1.ReorderLessonsResponse]
-	watchCourse    *connect.Client[v1.WatchCourseRequest, v1.WatchCourseResponse]
-}
-
-// ListCourses calls lessons.v1.LessonsService.ListCourses.
-func (c *lessonsServiceClient) ListCourses(ctx context.Context, req *connect.Request[v1.ListCoursesRequest]) (*connect.Response[v1.ListCoursesResponse], error) {
-	return c.listCourses.CallUnary(ctx, req)
-}
-
-// GetCourse calls lessons.v1.LessonsService.GetCourse.
-func (c *lessonsServiceClient) GetCourse(ctx context.Context, req *connect.Request[v1.GetCourseRequest]) (*connect.Response[v1.GetCourseResponse], error) {
-	return c.getCourse.CallUnary(ctx, req)
-}
-
-// CreateCourse calls lessons.v1.LessonsService.CreateCourse.
-func (c *lessonsServiceClient) CreateCourse(ctx context.Context, req *connect.Request[v1.CreateCourseRequest]) (*connect.Response[v1.CreateCourseResponse], error) {
-	return c.createCourse.CallUnary(ctx, req)
-}
-
-// UpdateCourse calls lessons.v1.LessonsService.UpdateCourse.
-func (c *lessonsServiceClient) UpdateCourse(ctx context.Context, req *connect.Request[v1.UpdateCourseRequest]) (*connect.Response[v1.UpdateCourseResponse], error) {
-	return c.updateCourse.CallUnary(ctx, req)
-}
-
-// DeleteCourse calls lessons.v1.LessonsService.DeleteCourse.
-func (c *lessonsServiceClient) DeleteCourse(ctx context.Context, req *connect.Request[v1.DeleteCourseRequest]) (*connect.Response[v1.DeleteCourseResponse], error) {
-	return c.deleteCourse.CallUnary(ctx, req)
-}
-
-// CreateLesson calls lessons.v1.LessonsService.CreateLesson.
-func (c *lessonsServiceClient) CreateLesson(ctx context.Context, req *connect.Request[v1.CreateLessonRequest]) (*connect.Response[v1.CreateLessonResponse], error) {
-	return c.createLesson.CallUnary(ctx, req)
-}
-
-// UpdateLesson calls lessons.v1.LessonsService.UpdateLesson.
-func (c *lessonsServiceClient) UpdateLesson(ctx context.Context, req *connect.Request[v1.UpdateLessonRequest]) (*connect.Response[v1.UpdateLessonResponse], error) {
-	return c.updateLesson.CallUnary(ctx, req)
-}
-
-// DeleteLesson calls lessons.v1.LessonsService.DeleteLesson.
-func (c *lessonsServiceClient) DeleteLesson(ctx context.Context, req *connect.Request[v1.DeleteLessonRequest]) (*connect.Response[v1.DeleteLessonResponse], error) {
-	return c.deleteLesson.CallUnary(ctx, req)
-}
-
-// ReorderLessons calls lessons.v1.LessonsService.ReorderLessons.
-func (c *lessonsServiceClient) ReorderLessons(ctx context.Context, req *connect.Request[v1.ReorderLessonsRequest]) (*connect.Response[v1.ReorderLessonsResponse], error) {
-	return c.reorderLessons.CallUnary(ctx, req)
-}
-
-// WatchCourse calls lessons.v1.LessonsService.WatchCourse.
-func (c *lessonsServiceClient) WatchCourse(ctx context.Context, req *connect.Request[v1.WatchCourseRequest]) (*connect.ServerStreamForClient[v1.WatchCourseResponse], error) {
-	return c.watchCourse.CallServerStream(ctx, req)
+// Close releases the stream's resources. It is idempotent and is typically deferred to clean up a
+// stream abandoned before io.EOF.
+func (s LessonsServiceWatchCourseClientStream) Close() error {
+	return s.stream.Close()
 }
 
 // LessonsServiceHandler is an implementation of the lessons.v1.LessonsService service.
 type LessonsServiceHandler interface {
-	ListCourses(context.Context, *connect.Request[v1.ListCoursesRequest]) (*connect.Response[v1.ListCoursesResponse], error)
-	GetCourse(context.Context, *connect.Request[v1.GetCourseRequest]) (*connect.Response[v1.GetCourseResponse], error)
-	CreateCourse(context.Context, *connect.Request[v1.CreateCourseRequest]) (*connect.Response[v1.CreateCourseResponse], error)
-	UpdateCourse(context.Context, *connect.Request[v1.UpdateCourseRequest]) (*connect.Response[v1.UpdateCourseResponse], error)
-	DeleteCourse(context.Context, *connect.Request[v1.DeleteCourseRequest]) (*connect.Response[v1.DeleteCourseResponse], error)
-	CreateLesson(context.Context, *connect.Request[v1.CreateLessonRequest]) (*connect.Response[v1.CreateLessonResponse], error)
-	UpdateLesson(context.Context, *connect.Request[v1.UpdateLessonRequest]) (*connect.Response[v1.UpdateLessonResponse], error)
-	DeleteLesson(context.Context, *connect.Request[v1.DeleteLessonRequest]) (*connect.Response[v1.DeleteLessonResponse], error)
-	ReorderLessons(context.Context, *connect.Request[v1.ReorderLessonsRequest]) (*connect.Response[v1.ReorderLessonsResponse], error)
+	ListCourses(context.Context, *v1.ListCoursesRequest) (*v1.ListCoursesResponse, error)
+	GetCourse(context.Context, *v1.GetCourseRequest) (*v1.GetCourseResponse, error)
+	CreateCourse(context.Context, *v1.CreateCourseRequest) (*v1.CreateCourseResponse, error)
+	UpdateCourse(context.Context, *v1.UpdateCourseRequest) (*v1.UpdateCourseResponse, error)
+	DeleteCourse(context.Context, *v1.DeleteCourseRequest) (*v1.DeleteCourseResponse, error)
+	CreateLesson(context.Context, *v1.CreateLessonRequest) (*v1.CreateLessonResponse, error)
+	UpdateLesson(context.Context, *v1.UpdateLessonRequest) (*v1.UpdateLessonResponse, error)
+	DeleteLesson(context.Context, *v1.DeleteLessonRequest) (*v1.DeleteLessonResponse, error)
+	ReorderLessons(context.Context, *v1.ReorderLessonsRequest) (*v1.ReorderLessonsResponse, error)
 	// Server-streaming: a snapshot on subscribe, then one each time the course
 	// or its lessons change, and the unchanged snapshot again after 30s of
 	// silence (the production edge drops HTTP/2 streams idle for 60s). gRPC
 	// needs HTTP/2 end to end; the Connect protocol also streams over HTTP/1.1.
-	WatchCourse(context.Context, *connect.Request[v1.WatchCourseRequest], *connect.ServerStream[v1.WatchCourseResponse]) error
+	WatchCourse(context.Context, *v1.WatchCourseRequest, LessonsServiceWatchCourseServerStream) error
 }
 
-// NewLessonsServiceHandler builds an HTTP handler from the service implementation. It returns the
-// path on which to mount the handler and the handler itself.
-//
-// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
-// and JSON codecs. They also support gzip compression.
-func NewLessonsServiceHandler(svc LessonsServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
-	lessonsServiceMethods := v1.File_lessons_v1_lessons_proto.Services().ByName("LessonsService").Methods()
-	lessonsServiceListCoursesHandler := connect.NewUnaryHandler(
-		LessonsServiceListCoursesProcedure,
-		svc.ListCourses,
-		connect.WithSchema(lessonsServiceMethods.ByName("ListCourses")),
-		connect.WithHandlerOptions(opts...),
+// RegisterLessonsServiceHandler registers svc as the lessons.v1.LessonsService implementation on
+// server.
+func RegisterLessonsServiceHandler(server *connect.Server, svc LessonsServiceHandler) {
+	adapter := lessonsServiceHandler{svc: svc}
+	server.Register(
+		connect.Method{Spec: lessonsServiceListCoursesSpec(), Handler: adapter.listCourses},
+		connect.Method{Spec: lessonsServiceGetCourseSpec(), Handler: adapter.getCourse},
+		connect.Method{Spec: lessonsServiceCreateCourseSpec(), Handler: adapter.createCourse},
+		connect.Method{Spec: lessonsServiceUpdateCourseSpec(), Handler: adapter.updateCourse},
+		connect.Method{Spec: lessonsServiceDeleteCourseSpec(), Handler: adapter.deleteCourse},
+		connect.Method{Spec: lessonsServiceCreateLessonSpec(), Handler: adapter.createLesson},
+		connect.Method{Spec: lessonsServiceUpdateLessonSpec(), Handler: adapter.updateLesson},
+		connect.Method{Spec: lessonsServiceDeleteLessonSpec(), Handler: adapter.deleteLesson},
+		connect.Method{Spec: lessonsServiceReorderLessonsSpec(), Handler: adapter.reorderLessons},
+		connect.Method{Spec: lessonsServiceWatchCourseSpec(), Handler: adapter.watchCourse},
 	)
-	lessonsServiceGetCourseHandler := connect.NewUnaryHandler(
-		LessonsServiceGetCourseProcedure,
-		svc.GetCourse,
-		connect.WithSchema(lessonsServiceMethods.ByName("GetCourse")),
-		connect.WithHandlerOptions(opts...),
-	)
-	lessonsServiceCreateCourseHandler := connect.NewUnaryHandler(
-		LessonsServiceCreateCourseProcedure,
-		svc.CreateCourse,
-		connect.WithSchema(lessonsServiceMethods.ByName("CreateCourse")),
-		connect.WithHandlerOptions(opts...),
-	)
-	lessonsServiceUpdateCourseHandler := connect.NewUnaryHandler(
-		LessonsServiceUpdateCourseProcedure,
-		svc.UpdateCourse,
-		connect.WithSchema(lessonsServiceMethods.ByName("UpdateCourse")),
-		connect.WithHandlerOptions(opts...),
-	)
-	lessonsServiceDeleteCourseHandler := connect.NewUnaryHandler(
-		LessonsServiceDeleteCourseProcedure,
-		svc.DeleteCourse,
-		connect.WithSchema(lessonsServiceMethods.ByName("DeleteCourse")),
-		connect.WithHandlerOptions(opts...),
-	)
-	lessonsServiceCreateLessonHandler := connect.NewUnaryHandler(
-		LessonsServiceCreateLessonProcedure,
-		svc.CreateLesson,
-		connect.WithSchema(lessonsServiceMethods.ByName("CreateLesson")),
-		connect.WithHandlerOptions(opts...),
-	)
-	lessonsServiceUpdateLessonHandler := connect.NewUnaryHandler(
-		LessonsServiceUpdateLessonProcedure,
-		svc.UpdateLesson,
-		connect.WithSchema(lessonsServiceMethods.ByName("UpdateLesson")),
-		connect.WithHandlerOptions(opts...),
-	)
-	lessonsServiceDeleteLessonHandler := connect.NewUnaryHandler(
-		LessonsServiceDeleteLessonProcedure,
-		svc.DeleteLesson,
-		connect.WithSchema(lessonsServiceMethods.ByName("DeleteLesson")),
-		connect.WithHandlerOptions(opts...),
-	)
-	lessonsServiceReorderLessonsHandler := connect.NewUnaryHandler(
-		LessonsServiceReorderLessonsProcedure,
-		svc.ReorderLessons,
-		connect.WithSchema(lessonsServiceMethods.ByName("ReorderLessons")),
-		connect.WithHandlerOptions(opts...),
-	)
-	lessonsServiceWatchCourseHandler := connect.NewServerStreamHandler(
-		LessonsServiceWatchCourseProcedure,
-		svc.WatchCourse,
-		connect.WithSchema(lessonsServiceMethods.ByName("WatchCourse")),
-		connect.WithHandlerOptions(opts...),
-	)
-	return "/lessons.v1.LessonsService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case LessonsServiceListCoursesProcedure:
-			lessonsServiceListCoursesHandler.ServeHTTP(w, r)
-		case LessonsServiceGetCourseProcedure:
-			lessonsServiceGetCourseHandler.ServeHTTP(w, r)
-		case LessonsServiceCreateCourseProcedure:
-			lessonsServiceCreateCourseHandler.ServeHTTP(w, r)
-		case LessonsServiceUpdateCourseProcedure:
-			lessonsServiceUpdateCourseHandler.ServeHTTP(w, r)
-		case LessonsServiceDeleteCourseProcedure:
-			lessonsServiceDeleteCourseHandler.ServeHTTP(w, r)
-		case LessonsServiceCreateLessonProcedure:
-			lessonsServiceCreateLessonHandler.ServeHTTP(w, r)
-		case LessonsServiceUpdateLessonProcedure:
-			lessonsServiceUpdateLessonHandler.ServeHTTP(w, r)
-		case LessonsServiceDeleteLessonProcedure:
-			lessonsServiceDeleteLessonHandler.ServeHTTP(w, r)
-		case LessonsServiceReorderLessonsProcedure:
-			lessonsServiceReorderLessonsHandler.ServeHTTP(w, r)
-		case LessonsServiceWatchCourseProcedure:
-			lessonsServiceWatchCourseHandler.ServeHTTP(w, r)
-		default:
-			http.NotFound(w, r)
-		}
-	})
+}
+
+// LessonsServiceWatchCourseServerStream is the server stream for the LessonsService's WatchCourse
+// RPC.
+type LessonsServiceWatchCourseServerStream struct {
+	stream connect.ServerStream
+}
+
+// SendHeaders flushes the response headers without a message. The first Send does this implicitly.
+func (s LessonsServiceWatchCourseServerStream) SendHeaders() error {
+	return s.stream.SendHeaders()
+}
+
+// Send sends a response message to the client.
+func (s LessonsServiceWatchCourseServerStream) Send(res *v1.WatchCourseResponse) error {
+	return s.stream.Send(res)
 }
 
 // UnimplementedLessonsServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedLessonsServiceHandler struct{}
 
-func (UnimplementedLessonsServiceHandler) ListCourses(context.Context, *connect.Request[v1.ListCoursesRequest]) (*connect.Response[v1.ListCoursesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("lessons.v1.LessonsService.ListCourses is not implemented"))
+func (UnimplementedLessonsServiceHandler) ListCourses(context.Context, *v1.ListCoursesRequest) (*v1.ListCoursesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "lessons.v1.LessonsService.ListCourses is not implemented")
 }
 
-func (UnimplementedLessonsServiceHandler) GetCourse(context.Context, *connect.Request[v1.GetCourseRequest]) (*connect.Response[v1.GetCourseResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("lessons.v1.LessonsService.GetCourse is not implemented"))
+func (UnimplementedLessonsServiceHandler) GetCourse(context.Context, *v1.GetCourseRequest) (*v1.GetCourseResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "lessons.v1.LessonsService.GetCourse is not implemented")
 }
 
-func (UnimplementedLessonsServiceHandler) CreateCourse(context.Context, *connect.Request[v1.CreateCourseRequest]) (*connect.Response[v1.CreateCourseResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("lessons.v1.LessonsService.CreateCourse is not implemented"))
+func (UnimplementedLessonsServiceHandler) CreateCourse(context.Context, *v1.CreateCourseRequest) (*v1.CreateCourseResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "lessons.v1.LessonsService.CreateCourse is not implemented")
 }
 
-func (UnimplementedLessonsServiceHandler) UpdateCourse(context.Context, *connect.Request[v1.UpdateCourseRequest]) (*connect.Response[v1.UpdateCourseResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("lessons.v1.LessonsService.UpdateCourse is not implemented"))
+func (UnimplementedLessonsServiceHandler) UpdateCourse(context.Context, *v1.UpdateCourseRequest) (*v1.UpdateCourseResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "lessons.v1.LessonsService.UpdateCourse is not implemented")
 }
 
-func (UnimplementedLessonsServiceHandler) DeleteCourse(context.Context, *connect.Request[v1.DeleteCourseRequest]) (*connect.Response[v1.DeleteCourseResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("lessons.v1.LessonsService.DeleteCourse is not implemented"))
+func (UnimplementedLessonsServiceHandler) DeleteCourse(context.Context, *v1.DeleteCourseRequest) (*v1.DeleteCourseResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "lessons.v1.LessonsService.DeleteCourse is not implemented")
 }
 
-func (UnimplementedLessonsServiceHandler) CreateLesson(context.Context, *connect.Request[v1.CreateLessonRequest]) (*connect.Response[v1.CreateLessonResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("lessons.v1.LessonsService.CreateLesson is not implemented"))
+func (UnimplementedLessonsServiceHandler) CreateLesson(context.Context, *v1.CreateLessonRequest) (*v1.CreateLessonResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "lessons.v1.LessonsService.CreateLesson is not implemented")
 }
 
-func (UnimplementedLessonsServiceHandler) UpdateLesson(context.Context, *connect.Request[v1.UpdateLessonRequest]) (*connect.Response[v1.UpdateLessonResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("lessons.v1.LessonsService.UpdateLesson is not implemented"))
+func (UnimplementedLessonsServiceHandler) UpdateLesson(context.Context, *v1.UpdateLessonRequest) (*v1.UpdateLessonResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "lessons.v1.LessonsService.UpdateLesson is not implemented")
 }
 
-func (UnimplementedLessonsServiceHandler) DeleteLesson(context.Context, *connect.Request[v1.DeleteLessonRequest]) (*connect.Response[v1.DeleteLessonResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("lessons.v1.LessonsService.DeleteLesson is not implemented"))
+func (UnimplementedLessonsServiceHandler) DeleteLesson(context.Context, *v1.DeleteLessonRequest) (*v1.DeleteLessonResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "lessons.v1.LessonsService.DeleteLesson is not implemented")
 }
 
-func (UnimplementedLessonsServiceHandler) ReorderLessons(context.Context, *connect.Request[v1.ReorderLessonsRequest]) (*connect.Response[v1.ReorderLessonsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("lessons.v1.LessonsService.ReorderLessons is not implemented"))
+func (UnimplementedLessonsServiceHandler) ReorderLessons(context.Context, *v1.ReorderLessonsRequest) (*v1.ReorderLessonsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, "lessons.v1.LessonsService.ReorderLessons is not implemented")
 }
 
-func (UnimplementedLessonsServiceHandler) WatchCourse(context.Context, *connect.Request[v1.WatchCourseRequest], *connect.ServerStream[v1.WatchCourseResponse]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("lessons.v1.LessonsService.WatchCourse is not implemented"))
+func (UnimplementedLessonsServiceHandler) WatchCourse(context.Context, *v1.WatchCourseRequest, LessonsServiceWatchCourseServerStream) error {
+	return connect.NewError(connect.CodeUnimplemented, "lessons.v1.LessonsService.WatchCourse is not implemented")
+}
+
+type lessonsServiceClient struct {
+	client *connect.Client
+}
+
+func (c *lessonsServiceClient) ListCourses(ctx context.Context, req *v1.ListCoursesRequest) (*v1.ListCoursesResponse, error) {
+	var res v1.ListCoursesResponse
+	if err := c.client.CallUnary(ctx, lessonsServiceListCoursesSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *lessonsServiceClient) GetCourse(ctx context.Context, req *v1.GetCourseRequest) (*v1.GetCourseResponse, error) {
+	var res v1.GetCourseResponse
+	if err := c.client.CallUnary(ctx, lessonsServiceGetCourseSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *lessonsServiceClient) CreateCourse(ctx context.Context, req *v1.CreateCourseRequest) (*v1.CreateCourseResponse, error) {
+	var res v1.CreateCourseResponse
+	if err := c.client.CallUnary(ctx, lessonsServiceCreateCourseSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *lessonsServiceClient) UpdateCourse(ctx context.Context, req *v1.UpdateCourseRequest) (*v1.UpdateCourseResponse, error) {
+	var res v1.UpdateCourseResponse
+	if err := c.client.CallUnary(ctx, lessonsServiceUpdateCourseSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *lessonsServiceClient) DeleteCourse(ctx context.Context, req *v1.DeleteCourseRequest) (*v1.DeleteCourseResponse, error) {
+	var res v1.DeleteCourseResponse
+	if err := c.client.CallUnary(ctx, lessonsServiceDeleteCourseSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *lessonsServiceClient) CreateLesson(ctx context.Context, req *v1.CreateLessonRequest) (*v1.CreateLessonResponse, error) {
+	var res v1.CreateLessonResponse
+	if err := c.client.CallUnary(ctx, lessonsServiceCreateLessonSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *lessonsServiceClient) UpdateLesson(ctx context.Context, req *v1.UpdateLessonRequest) (*v1.UpdateLessonResponse, error) {
+	var res v1.UpdateLessonResponse
+	if err := c.client.CallUnary(ctx, lessonsServiceUpdateLessonSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *lessonsServiceClient) DeleteLesson(ctx context.Context, req *v1.DeleteLessonRequest) (*v1.DeleteLessonResponse, error) {
+	var res v1.DeleteLessonResponse
+	if err := c.client.CallUnary(ctx, lessonsServiceDeleteLessonSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *lessonsServiceClient) ReorderLessons(ctx context.Context, req *v1.ReorderLessonsRequest) (*v1.ReorderLessonsResponse, error) {
+	var res v1.ReorderLessonsResponse
+	if err := c.client.CallUnary(ctx, lessonsServiceReorderLessonsSpec(), req, &res); err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func (c *lessonsServiceClient) WatchCourse(ctx context.Context, req *v1.WatchCourseRequest) (LessonsServiceWatchCourseClientStream, error) {
+	stream, err := c.client.CallServerStream(ctx, lessonsServiceWatchCourseSpec(), req)
+	if err != nil {
+		return LessonsServiceWatchCourseClientStream{}, err
+	}
+	return LessonsServiceWatchCourseClientStream{stream: stream}, nil
+}
+
+type lessonsServiceHandler struct{ svc LessonsServiceHandler }
+
+func (h lessonsServiceHandler) listCourses(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ListCoursesRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ListCourses(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h lessonsServiceHandler) getCourse(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.GetCourseRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.GetCourse(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h lessonsServiceHandler) createCourse(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CreateCourseRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CreateCourse(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h lessonsServiceHandler) updateCourse(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.UpdateCourseRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.UpdateCourse(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h lessonsServiceHandler) deleteCourse(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DeleteCourseRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DeleteCourse(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h lessonsServiceHandler) createLesson(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.CreateLessonRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.CreateLesson(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h lessonsServiceHandler) updateLesson(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.UpdateLessonRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.UpdateLesson(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h lessonsServiceHandler) deleteLesson(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.DeleteLessonRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.DeleteLesson(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h lessonsServiceHandler) reorderLessons(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.ReorderLessonsRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	res, err := h.svc.ReorderLessons(ctx, &req)
+	if err != nil {
+		return err
+	}
+	return stream.Send(res)
+}
+
+func (h lessonsServiceHandler) watchCourse(ctx context.Context, _ connect.Spec, stream connect.ServerStream) error {
+	var req v1.WatchCourseRequest
+	if err := stream.Receive(&req); err != nil {
+		return err
+	}
+	return h.svc.WatchCourse(ctx, &req, LessonsServiceWatchCourseServerStream{stream: stream})
 }
