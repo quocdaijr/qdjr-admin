@@ -8,6 +8,7 @@ on:
       - 'proto/**'
       - 'buf.yaml'
       - 'buf.gen.yaml'
+      - 'buf.gen.errdetails.yaml'
       - '.github/workflows/api.yml'
   pull_request:
     branches: [main]
@@ -16,6 +17,7 @@ on:
       - 'proto/**'
       - 'buf.yaml'
       - 'buf.gen.yaml'
+      - 'buf.gen.errdetails.yaml'
       - '.github/workflows/api.yml'
 
 permissions:
@@ -62,6 +64,7 @@ jobs:
         run: |
           npx -y @bufbuild/buf@1.73.0 lint
           npx -y @bufbuild/buf@1.73.0 generate
+          npx -y @bufbuild/buf@1.73.0 generate --template buf.gen.errdetails.yaml
           git diff --exit-code -- apps/api/internal/gen apps/web/gen
 
       - name: Migrate (goose, embedded)

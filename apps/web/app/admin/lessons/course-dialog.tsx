@@ -8,7 +8,7 @@ import { z } from 'zod';
 import { toast } from 'sonner';
 
 import type { Course } from '@/gen/lessons/v1/lessons_pb';
-import { lessonsClient, rpcErrorMessage } from '@/lib/rpc';
+import { lessonsClient, rpcErrorMessage, setFieldErrors } from '@/lib/rpc';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -22,7 +22,7 @@ import {
 } from '@/components/ui/dialog';
 
 const schema = z.object({
-  title: z.string().trim().min(1, 'Required').max(200),
+  title: z.string().trim().min(1, 'Required'),
   url: z.string().trim().url('Must be a URL').or(z.literal('')),
   provider: z.string().trim().max(100),
   notes: z.string().max(10_000),
@@ -53,12 +53,18 @@ export function CourseDialog({ open, onOpenChange, course }: CourseDialogProps) 
     register,
     handleSubmit,
     reset,
+    setError,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({ resolver: zodResolver(schema), defaultValues: defaultValues(course) });
 
   useEffect(() => {
     if (open) reset(defaultValues(course));
   }, [open, course, reset]);
+
+  // Server-side field errors (google.rpc.BadRequest) go under the input; anything else is a toast.
+  const onRpcError = (fallback: string) => (err: unknown) => {
+    if (!setFieldErrors(err, ['title', 'url', 'provider', 'notes'] as const, setError)) toast.error(rpcErrorMessage(err, fallback));
+  };
 
   const done = () => {
     queryClient.invalidateQueries({ queryKey: ['courses'] });
@@ -69,13 +75,13 @@ export function CourseDialog({ open, onOpenChange, course }: CourseDialogProps) 
   const createMutation = useMutation({
     mutationFn: (values: FormValues) => lessonsClient.createCourse(values),
     onSuccess: done,
-    onError: (err) => toast.error(rpcErrorMessage(err, 'Create failed')),
+    onError: onRpcError('Create failed'),
   });
 
   const updateMutation = useMutation({
     mutationFn: (values: FormValues) => lessonsClient.updateCourse({ id: course!.id, ...values }),
     onSuccess: done,
-    onError: (err) => toast.error(rpcErrorMessage(err, 'Save failed')),
+    onError: onRpcError('Save failed'),
   });
 
   const onSubmit = handleSubmit((values) => {
