@@ -25,6 +25,12 @@ const maxTitleRunes = 200
 // can shorten it.
 var watchInterval = 2 * time.Second
 
+// watchKeepalive re-sends the current snapshot after this long without a
+// message. Measured 2026-10-13: the production edge (Cloudflare in front of
+// Render) resets an HTTP/2 stream that carries no data for 60s, while a
+// stream with a message every 25s stayed up. Keep this well under 60s.
+var watchKeepalive = 30 * time.Second
+
 // maxRequestBytes caps a Connect request body after decompression. connect-go
 // v1 reads the body before interceptors run, so this is what stops an
 // anonymous caller from making the server buffer an arbitrary upload.
@@ -259,7 +265,8 @@ func (h *Handler) ReorderLessons(ctx context.Context, req *connect.Request[lesso
 // WatchCourse streams the course with its lessons: one snapshot on subscribe,
 // then one each time something changes, until the client goes away or the
 // course is deleted (NotFound). Changes are found by re-reading every
-// watchInterval and comparing with the last snapshot sent.
+// watchInterval and comparing with the last snapshot sent; an unchanged
+// snapshot is re-sent after watchKeepalive so idle streams survive the edge.
 // ponytail: polling, one GetCourse per watcher per tick; switch to
 // LISTEN/NOTIFY if watchers ever outnumber a couple of admin tabs.
 func (h *Handler) WatchCourse(ctx context.Context, req *connect.Request[lessonsv1.WatchCourseRequest], stream *connect.ServerStream[lessonsv1.WatchCourseResponse]) error {
@@ -269,7 +276,10 @@ func (h *Handler) WatchCourse(ctx context.Context, req *connect.Request[lessonsv
 	}
 	ticker := time.NewTicker(watchInterval)
 	defer ticker.Stop()
-	var last *lessonsv1.WatchCourseResponse
+	var (
+		last     *lessonsv1.WatchCourseResponse
+		lastSent time.Time
+	)
 	for {
 		c, lessons, err := h.repo.GetCourse(ctx, id)
 		if ctx.Err() != nil {
@@ -282,11 +292,12 @@ func (h *Handler) WatchCourse(ctx context.Context, req *connect.Request[lessonsv
 		for _, l := range lessons {
 			snap.Lessons = append(snap.Lessons, lessonToProto(l))
 		}
-		if last == nil || !proto.Equal(last, snap) {
+		changed := last == nil || !proto.Equal(last, snap)
+		if changed || time.Since(lastSent) >= watchKeepalive {
 			if err := stream.Send(snap); err != nil {
 				return err
 			}
-			last = snap
+			last, lastSent = snap, time.Now()
 		}
 		select {
 		case <-ctx.Done():

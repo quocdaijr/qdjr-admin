@@ -525,9 +525,9 @@ func (s *syncBuf) String() string {
 
 func fastWatch(t *testing.T) {
 	t.Helper()
-	prev := watchInterval
+	prevInterval, prevKeepalive := watchInterval, watchKeepalive
 	watchInterval = 20 * time.Millisecond
-	t.Cleanup(func() { watchInterval = prev })
+	t.Cleanup(func() { watchInterval, watchKeepalive = prevInterval, prevKeepalive })
 }
 
 // TestRPC_WatchCourse_NoToken_Unauthenticated pins that auth (and logging)
@@ -588,5 +588,28 @@ func TestRPC_WatchCourse_SnapshotThenChange_GRPC(t *testing.T) {
 	require.True(t, stream.Receive(), "change: %v", stream.Err())
 	require.Len(t, stream.Msg().GetLessons(), 1)
 	assert.Equal(t, "new", stream.Msg().GetLessons()[0].GetTitle())
+	require.NoError(t, stream.Close())
+}
+
+// TestRPC_WatchCourse_KeepaliveResendsWhenIdle: with nothing changing, the
+// stream still sends the current snapshot every watchKeepalive, because the
+// production edge resets an HTTP/2 stream after ~60s without data.
+func TestRPC_WatchCourse_KeepaliveResendsWhenIdle(t *testing.T) {
+	fastWatch(t)
+	watchKeepalive = 100 * time.Millisecond
+	e := newEnv(t, "lessons:write")
+	c := e.client(t, uuid.New())
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	course, err := c.CreateCourse(ctx, connect.NewRequest(&lessonsv1.CreateCourseRequest{Title: "idle"}))
+	require.NoError(t, err)
+
+	stream, err := c.WatchCourse(ctx, connect.NewRequest(&lessonsv1.WatchCourseRequest{Id: course.Msg.GetCourse().GetId()}))
+	require.NoError(t, err)
+	require.True(t, stream.Receive(), "first snapshot: %v", stream.Err())
+	first := time.Now()
+	require.True(t, stream.Receive(), "keepalive: %v", stream.Err())
+	assert.GreaterOrEqual(t, time.Since(first), 80*time.Millisecond, "keepalive came too early")
+	assert.Equal(t, "idle", stream.Msg().GetCourse().GetTitle())
 	require.NoError(t, stream.Close())
 }
