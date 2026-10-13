@@ -1,4 +1,4 @@
-import { getAccessToken, refreshSession, signOut } from './auth';
+import { sendWithSession } from './auth';
 
 const BASE = process.env.NEXT_PUBLIC_API_URL!;
 
@@ -30,16 +30,8 @@ async function send(path: string, init: RequestInit | undefined, token: string |
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<Envelope<T>> {
-  let res = await send(path, init, await getAccessToken());
-  if (res.status === 401) {
-    // The access token may have been revoked or expired mid-flight: refresh once.
-    const fresh = await refreshSession();
-    if (!fresh) {
-      await signOut();
-    } else {
-      res = await send(path, init, fresh);
-    }
-  }
+  // Refresh-once-then-sign-out lives in sendWithSession (lib/auth.ts).
+  const res = await sendWithSession((token) => send(path, init, token));
   if (res.status === 204) {
     return { data: null, error: null } as Envelope<T>;
   }

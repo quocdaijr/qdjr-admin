@@ -143,6 +143,23 @@ export async function getAccessToken(): Promise<string | null> {
   return refreshSession();
 }
 
+/**
+ * Sends with the current access token. On a 401 it refreshes once and
+ * resends; if there is no session to refresh, or the fresh token is refused
+ * too, it signs out, so the admin layout redirects to /login instead of
+ * leaving a silent error on screen. Returns the last response either way.
+ */
+export async function sendWithSession<R extends { status: number }>(
+  send: (token: string | null) => Promise<R>
+): Promise<R> {
+  let res = await send(await getAccessToken());
+  if (res.status !== 401) return res;
+  const fresh = await refreshSession();
+  if (fresh) res = await send(fresh);
+  if (res.status === 401) await signOut();
+  return res;
+}
+
 export async function getCurrentUser(): Promise<AuthUser | null> {
   const user = storedUser();
   if (!user) return null;
