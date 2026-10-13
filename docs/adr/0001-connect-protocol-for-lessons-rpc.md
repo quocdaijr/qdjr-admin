@@ -12,3 +12,9 @@ The owner wanted to learn gRPC on a real feature. Native gRPC needs end-to-end H
 
 - Only unary RPCs in production; streaming needs end-to-end HTTP/2 (local only).
 - Performance is not the reason: for a single admin on free Render + Neon the difference is unmeasurable. Learning is.
+
+## Update 2026-10-13: native gRPC unary does work through Render (measured)
+
+Lesson 7 of the gRPC course called `ListCourses` three ways against production. Native gRPC, `grpcurl -import-path proto -proto lessons/v1/lessons.proto api.qdjr.dev:443 lessons.v1.LessonsService/ListCourses`, returned the full response with a gRPC status, consistently, and the same against `qdjr-admin-api.onrender.com:443`. Render's edge (fronted by Cloudflare, `server: cloudflare`) proxies HTTP/2 end to end for unary calls, so the Render sentence cited above is at least out of date for unary RPCs.
+
+The decision stands. Browsers still cannot send trailers, so the admin keeps using Connect over HTTP/1.1, and nothing in the stack needs native gRPC in production; it is a free extra for CLI and server-to-server callers. Streaming through Render is still unverified (lesson 17).
