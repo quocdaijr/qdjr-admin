@@ -77,8 +77,9 @@ type LessonsServiceClient interface {
 	DeleteLesson(context.Context, *connect.Request[v1.DeleteLessonRequest]) (*connect.Response[v1.DeleteLessonResponse], error)
 	ReorderLessons(context.Context, *connect.Request[v1.ReorderLessonsRequest]) (*connect.Response[v1.ReorderLessonsResponse], error)
 	// Server-streaming: a snapshot on subscribe, then one each time the course
-	// or its lessons change. gRPC needs HTTP/2 end to end; the Connect protocol
-	// also streams this over HTTP/1.1.
+	// or its lessons change, and the unchanged snapshot again after 30s of
+	// silence (the production edge drops HTTP/2 streams idle for 60s). gRPC
+	// needs HTTP/2 end to end; the Connect protocol also streams over HTTP/1.1.
 	WatchCourse(context.Context, *connect.Request[v1.WatchCourseRequest]) (*connect.ServerStreamForClient[v1.WatchCourseResponse], error)
 }
 
@@ -232,8 +233,9 @@ type LessonsServiceHandler interface {
 	DeleteLesson(context.Context, *connect.Request[v1.DeleteLessonRequest]) (*connect.Response[v1.DeleteLessonResponse], error)
 	ReorderLessons(context.Context, *connect.Request[v1.ReorderLessonsRequest]) (*connect.Response[v1.ReorderLessonsResponse], error)
 	// Server-streaming: a snapshot on subscribe, then one each time the course
-	// or its lessons change. gRPC needs HTTP/2 end to end; the Connect protocol
-	// also streams this over HTTP/1.1.
+	// or its lessons change, and the unchanged snapshot again after 30s of
+	// silence (the production edge drops HTTP/2 streams idle for 60s). gRPC
+	// needs HTTP/2 end to end; the Connect protocol also streams over HTTP/1.1.
 	WatchCourse(context.Context, *connect.Request[v1.WatchCourseRequest], *connect.ServerStream[v1.WatchCourseResponse]) error
 }
 

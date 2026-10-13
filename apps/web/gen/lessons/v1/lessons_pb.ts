@@ -687,8 +687,9 @@ export const LessonsService: GenService<{
   },
   /**
    * Server-streaming: a snapshot on subscribe, then one each time the course
-   * or its lessons change. gRPC needs HTTP/2 end to end; the Connect protocol
-   * also streams this over HTTP/1.1.
+   * or its lessons change, and the unchanged snapshot again after 30s of
+   * silence (the production edge drops HTTP/2 streams idle for 60s). gRPC
+   * needs HTTP/2 end to end; the Connect protocol also streams over HTTP/1.1.
    *
    * @generated from rpc lessons.v1.LessonsService.WatchCourse
    */
