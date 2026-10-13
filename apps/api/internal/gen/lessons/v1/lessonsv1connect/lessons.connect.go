@@ -60,6 +60,9 @@ const (
 	// LessonsServiceReorderLessonsProcedure is the fully-qualified name of the LessonsService's
 	// ReorderLessons RPC.
 	LessonsServiceReorderLessonsProcedure = "/lessons.v1.LessonsService/ReorderLessons"
+	// LessonsServiceWatchCourseProcedure is the fully-qualified name of the LessonsService's
+	// WatchCourse RPC.
+	LessonsServiceWatchCourseProcedure = "/lessons.v1.LessonsService/WatchCourse"
 )
 
 // LessonsServiceClient is a client for the lessons.v1.LessonsService service.
@@ -73,6 +76,10 @@ type LessonsServiceClient interface {
 	UpdateLesson(context.Context, *connect.Request[v1.UpdateLessonRequest]) (*connect.Response[v1.UpdateLessonResponse], error)
 	DeleteLesson(context.Context, *connect.Request[v1.DeleteLessonRequest]) (*connect.Response[v1.DeleteLessonResponse], error)
 	ReorderLessons(context.Context, *connect.Request[v1.ReorderLessonsRequest]) (*connect.Response[v1.ReorderLessonsResponse], error)
+	// Server-streaming: a snapshot on subscribe, then one each time the course
+	// or its lessons change. gRPC needs HTTP/2 end to end; the Connect protocol
+	// also streams this over HTTP/1.1.
+	WatchCourse(context.Context, *connect.Request[v1.WatchCourseRequest]) (*connect.ServerStreamForClient[v1.WatchCourseResponse], error)
 }
 
 // NewLessonsServiceClient constructs a client for the lessons.v1.LessonsService service. By
@@ -140,6 +147,12 @@ func NewLessonsServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(lessonsServiceMethods.ByName("ReorderLessons")),
 			connect.WithClientOptions(opts...),
 		),
+		watchCourse: connect.NewClient[v1.WatchCourseRequest, v1.WatchCourseResponse](
+			httpClient,
+			baseURL+LessonsServiceWatchCourseProcedure,
+			connect.WithSchema(lessonsServiceMethods.ByName("WatchCourse")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -154,6 +167,7 @@ type lessonsServiceClient struct {
 	updateLesson   *connect.Client[v1.UpdateLessonRequest, v1.UpdateLessonResponse]
 	deleteLesson   *connect.Client[v1.DeleteLessonRequest, v1.DeleteLessonResponse]
 	reorderLessons *connect.Client[v1.ReorderLessonsRequest, v1.ReorderLessonsResponse]
+	watchCourse    *connect.Client[v1.WatchCourseRequest, v1.WatchCourseResponse]
 }
 
 // ListCourses calls lessons.v1.LessonsService.ListCourses.
@@ -201,6 +215,11 @@ func (c *lessonsServiceClient) ReorderLessons(ctx context.Context, req *connect.
 	return c.reorderLessons.CallUnary(ctx, req)
 }
 
+// WatchCourse calls lessons.v1.LessonsService.WatchCourse.
+func (c *lessonsServiceClient) WatchCourse(ctx context.Context, req *connect.Request[v1.WatchCourseRequest]) (*connect.ServerStreamForClient[v1.WatchCourseResponse], error) {
+	return c.watchCourse.CallServerStream(ctx, req)
+}
+
 // LessonsServiceHandler is an implementation of the lessons.v1.LessonsService service.
 type LessonsServiceHandler interface {
 	ListCourses(context.Context, *connect.Request[v1.ListCoursesRequest]) (*connect.Response[v1.ListCoursesResponse], error)
@@ -212,6 +231,10 @@ type LessonsServiceHandler interface {
 	UpdateLesson(context.Context, *connect.Request[v1.UpdateLessonRequest]) (*connect.Response[v1.UpdateLessonResponse], error)
 	DeleteLesson(context.Context, *connect.Request[v1.DeleteLessonRequest]) (*connect.Response[v1.DeleteLessonResponse], error)
 	ReorderLessons(context.Context, *connect.Request[v1.ReorderLessonsRequest]) (*connect.Response[v1.ReorderLessonsResponse], error)
+	// Server-streaming: a snapshot on subscribe, then one each time the course
+	// or its lessons change. gRPC needs HTTP/2 end to end; the Connect protocol
+	// also streams this over HTTP/1.1.
+	WatchCourse(context.Context, *connect.Request[v1.WatchCourseRequest], *connect.ServerStream[v1.WatchCourseResponse]) error
 }
 
 // NewLessonsServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -275,6 +298,12 @@ func NewLessonsServiceHandler(svc LessonsServiceHandler, opts ...connect.Handler
 		connect.WithSchema(lessonsServiceMethods.ByName("ReorderLessons")),
 		connect.WithHandlerOptions(opts...),
 	)
+	lessonsServiceWatchCourseHandler := connect.NewServerStreamHandler(
+		LessonsServiceWatchCourseProcedure,
+		svc.WatchCourse,
+		connect.WithSchema(lessonsServiceMethods.ByName("WatchCourse")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/lessons.v1.LessonsService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case LessonsServiceListCoursesProcedure:
@@ -295,6 +324,8 @@ func NewLessonsServiceHandler(svc LessonsServiceHandler, opts ...connect.Handler
 			lessonsServiceDeleteLessonHandler.ServeHTTP(w, r)
 		case LessonsServiceReorderLessonsProcedure:
 			lessonsServiceReorderLessonsHandler.ServeHTTP(w, r)
+		case LessonsServiceWatchCourseProcedure:
+			lessonsServiceWatchCourseHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -338,4 +369,8 @@ func (UnimplementedLessonsServiceHandler) DeleteLesson(context.Context, *connect
 
 func (UnimplementedLessonsServiceHandler) ReorderLessons(context.Context, *connect.Request[v1.ReorderLessonsRequest]) (*connect.Response[v1.ReorderLessonsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("lessons.v1.LessonsService.ReorderLessons is not implemented"))
+}
+
+func (UnimplementedLessonsServiceHandler) WatchCourse(context.Context, *connect.Request[v1.WatchCourseRequest], *connect.ServerStream[v1.WatchCourseResponse]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("lessons.v1.LessonsService.WatchCourse is not implemented"))
 }

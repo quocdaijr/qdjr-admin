@@ -6,7 +6,9 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -42,6 +44,7 @@ func (r *resolverStub) Can(_ context.Context, _ uuid.UUID, p string) (bool, erro
 
 // stubRepo is an in-memory AdminWriter that records the last inputs.
 type stubRepo struct {
+	mu             sync.Mutex // WatchCourse polls from the server goroutine
 	panicOnList    bool
 	courses        map[uuid.UUID]Course
 	lessons        map[uuid.UUID]Lesson
@@ -57,6 +60,8 @@ func newStubRepo() *stubRepo {
 }
 
 func (s *stubRepo) ListCourses(_ context.Context, f ListFilter) ([]Course, int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.panicOnList {
 		panic("boom")
 	}
@@ -69,6 +74,8 @@ func (s *stubRepo) ListCourses(_ context.Context, f ListFilter) ([]Course, int, 
 }
 
 func (s *stubRepo) GetCourse(_ context.Context, id uuid.UUID) (Course, []Lesson, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	c, ok := s.courses[id]
 	if !ok {
 		return Course{}, nil, ErrNotFound
@@ -79,10 +86,13 @@ func (s *stubRepo) GetCourse(_ context.Context, id uuid.UUID) (Course, []Lesson,
 			ls = append(ls, l)
 		}
 	}
+	sort.Slice(ls, func(i, j int) bool { return ls[i].Position < ls[j].Position })
 	return c, ls, nil
 }
 
 func (s *stubRepo) CreateCourse(_ context.Context, in CreateCourseInput) (Course, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.createCourseIn = in
 	now := time.Now().UTC()
 	c := Course{ID: uuid.New(), Title: in.Title, URL: in.URL, Provider: in.Provider, Notes: in.Notes, CreatedAt: now, UpdatedAt: now}
@@ -91,6 +101,8 @@ func (s *stubRepo) CreateCourse(_ context.Context, in CreateCourseInput) (Course
 }
 
 func (s *stubRepo) UpdateCourse(_ context.Context, id uuid.UUID, in UpdateCourseInput) (Course, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	c, ok := s.courses[id]
 	if !ok {
 		return Course{}, ErrNotFound
@@ -112,6 +124,8 @@ func (s *stubRepo) UpdateCourse(_ context.Context, id uuid.UUID, in UpdateCourse
 }
 
 func (s *stubRepo) DeleteCourse(_ context.Context, id uuid.UUID) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if _, ok := s.courses[id]; !ok {
 		return ErrNotFound
 	}
@@ -120,6 +134,8 @@ func (s *stubRepo) DeleteCourse(_ context.Context, id uuid.UUID) error {
 }
 
 func (s *stubRepo) CreateLesson(_ context.Context, in CreateLessonInput) (Lesson, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if _, ok := s.courses[in.CourseID]; !ok {
 		return Lesson{}, ErrNotFound
 	}
@@ -130,6 +146,8 @@ func (s *stubRepo) CreateLesson(_ context.Context, in CreateLessonInput) (Lesson
 }
 
 func (s *stubRepo) UpdateLesson(_ context.Context, id uuid.UUID, in UpdateLessonInput) (Lesson, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.updateLessonIn = in
 	l, ok := s.lessons[id]
 	if !ok {
@@ -152,6 +170,8 @@ func (s *stubRepo) UpdateLesson(_ context.Context, id uuid.UUID, in UpdateLesson
 }
 
 func (s *stubRepo) DeleteLesson(_ context.Context, id uuid.UUID) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if _, ok := s.lessons[id]; !ok {
 		return ErrNotFound
 	}
@@ -203,12 +223,30 @@ func token(t *testing.T, uid uuid.UUID, exp time.Time) string {
 }
 
 func bearer(tok string) connect.ClientOption {
-	return connect.WithInterceptors(connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
-		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-			req.Header().Set("Authorization", "Bearer "+tok)
-			return next(ctx, req)
-		}
-	}))
+	return connect.WithInterceptors(bearerInterceptor{value: "Bearer " + tok})
+}
+
+// bearerInterceptor stamps unary and streaming calls alike; a
+// UnaryInterceptorFunc would silently skip WatchCourse.
+type bearerInterceptor struct{ value string }
+
+func (b bearerInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
+	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
+		req.Header().Set("Authorization", b.value)
+		return next(ctx, req)
+	}
+}
+
+func (b bearerInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
+	return func(ctx context.Context, spec connect.Spec) connect.StreamingClientConn {
+		conn := next(ctx, spec)
+		conn.RequestHeader().Set("Authorization", b.value)
+		return conn
+	}
+}
+
+func (b bearerInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
+	return next
 }
 
 func (e *env) client(t *testing.T, uid uuid.UUID, opts ...connect.ClientOption) lessonsv1connect.LessonsServiceClient {
@@ -386,6 +424,8 @@ func TestRPC_CreateCourse_LongTitle_FieldViolation(t *testing.T) {
 }
 
 func (s *stubRepo) ReorderLessons(_ context.Context, courseID uuid.UUID, ids []uuid.UUID) ([]Lesson, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.reorderIDs = ids
 	if s.reorderErr != nil {
 		return nil, s.reorderErr
@@ -463,4 +503,90 @@ func TestRPC_ReorderLessons_Mismatch_InvalidArgument(t *testing.T) {
 	}))
 	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
 	assert.Equal(t, "lesson_ids", fieldOf(t, err))
+}
+
+// syncBuf is a log sink the server goroutine and the test can share.
+type syncBuf struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (s *syncBuf) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.Write(p)
+}
+
+func (s *syncBuf) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.String()
+}
+
+func fastWatch(t *testing.T) {
+	t.Helper()
+	prev := watchInterval
+	watchInterval = 20 * time.Millisecond
+	t.Cleanup(func() { watchInterval = prev })
+}
+
+// TestRPC_WatchCourse_NoToken_Unauthenticated pins that auth (and logging)
+// cover streaming calls, not only unary ones.
+func TestRPC_WatchCourse_NoToken_Unauthenticated(t *testing.T) {
+	var buf syncBuf
+	e := newEnvWith(t, []connect.Interceptor{apphttp.RPCLog(slog.New(slog.NewJSONHandler(&buf, nil)))}, "lessons:write")
+	anon := lessonsv1connect.NewLessonsServiceClient(http.DefaultClient, e.srv.URL)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	stream, err := anon.WatchCourse(ctx, connect.NewRequest(&lessonsv1.WatchCourseRequest{Id: uuid.NewString()}))
+	require.NoError(t, err)
+	assert.False(t, stream.Receive())
+	assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(stream.Err()))
+	assert.Contains(t, buf.String(), `"procedure":"/lessons.v1.LessonsService/WatchCourse"`)
+	assert.Contains(t, buf.String(), `"code":"unauthenticated"`)
+}
+
+func TestRPC_WatchCourse_UnknownCourse_NotFound(t *testing.T) {
+	fastWatch(t)
+	e := newEnv(t, "lessons:write")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	stream, err := e.client(t, uuid.New()).WatchCourse(ctx, connect.NewRequest(&lessonsv1.WatchCourseRequest{Id: uuid.NewString()}))
+	require.NoError(t, err)
+	assert.False(t, stream.Receive())
+	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(stream.Err()))
+}
+
+// TestRPC_WatchCourse_SnapshotThenChange_GRPC streams over native gRPC on
+// h2c (what the cmd/watch client does): a first snapshot, nothing while
+// unchanged, then a new snapshot after a lesson is added.
+func TestRPC_WatchCourse_SnapshotThenChange_GRPC(t *testing.T) {
+	fastWatch(t)
+	e := newEnv(t, "lessons:write")
+	uid := uuid.New()
+	c := e.client(t, uid)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	course, err := c.CreateCourse(ctx, connect.NewRequest(&lessonsv1.CreateCourseRequest{Title: "watched"}))
+	require.NoError(t, err)
+	cid := course.Msg.GetCourse().GetId()
+
+	var cp http.Protocols
+	cp.SetUnencryptedHTTP2(true)
+	h2c := &http.Client{Transport: &http.Transport{Protocols: &cp}}
+	g := lessonsv1connect.NewLessonsServiceClient(h2c, e.srv.URL, connect.WithGRPC(), bearer(token(t, uid, time.Now().Add(time.Hour))))
+	stream, err := g.WatchCourse(ctx, connect.NewRequest(&lessonsv1.WatchCourseRequest{Id: cid}))
+	require.NoError(t, err)
+
+	require.True(t, stream.Receive(), "first snapshot: %v", stream.Err())
+	assert.Equal(t, "watched", stream.Msg().GetCourse().GetTitle())
+	assert.Empty(t, stream.Msg().GetLessons())
+
+	_, err = c.CreateLesson(ctx, connect.NewRequest(&lessonsv1.CreateLessonRequest{CourseId: cid, Title: "new"}))
+	require.NoError(t, err)
+	// An unchanged poll sends nothing, so the next message is the change.
+	require.True(t, stream.Receive(), "change: %v", stream.Err())
+	require.Len(t, stream.Msg().GetLessons(), 1)
+	assert.Equal(t, "new", stream.Msg().GetLessons()[0].GetTitle())
+	require.NoError(t, stream.Close())
 }

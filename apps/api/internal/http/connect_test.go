@@ -45,7 +45,7 @@ func signedToken(t *testing.T, uid uuid.UUID, exp time.Time) string {
 }
 
 // callThrough runs the interceptor with a next that records the ctx user id.
-func callThrough(t *testing.T, i connect.UnaryInterceptorFunc, authHeader string) (uuid.UUID, bool, error) {
+func callThrough(t *testing.T, i connect.Interceptor, authHeader string) (uuid.UUID, bool, error) {
 	t.Helper()
 	var seen uuid.UUID
 	var ok bool
@@ -57,7 +57,7 @@ func callThrough(t *testing.T, i connect.UnaryInterceptorFunc, authHeader string
 	if authHeader != "" {
 		req.Header().Set("Authorization", authHeader)
 	}
-	_, err := i(next)(context.Background(), req)
+	_, err := i.WrapUnary(next)(context.Background(), req)
 	return seen, ok, err
 }
 

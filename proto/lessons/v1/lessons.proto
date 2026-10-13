@@ -117,6 +117,12 @@ message ReorderLessonsRequest {
   // Every lesson of the course, exactly once, in the new order.
   repeated string lesson_ids = 2;
 }
+message WatchCourseRequest { string id = 1; }
+message WatchCourseResponse {
+  Course course = 1;
+  repeated Lesson lessons = 2; // ordered by position
+}
+
 message ReorderLessonsResponse {
   repeated Lesson lessons = 1; // ordered by the new position
 }
@@ -131,4 +137,8 @@ service LessonsService {
   rpc UpdateLesson(UpdateLessonRequest) returns (UpdateLessonResponse);
   rpc DeleteLesson(DeleteLessonRequest) returns (DeleteLessonResponse);
   rpc ReorderLessons(ReorderLessonsRequest) returns (ReorderLessonsResponse);
+  // Server-streaming: a snapshot on subscribe, then one each time the course
+  // or its lessons change. gRPC needs HTTP/2 end to end; the Connect protocol
+  // also streams this over HTTP/1.1.
+  rpc WatchCourse(WatchCourseRequest) returns (stream WatchCourseResponse);
 }
