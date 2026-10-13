@@ -76,3 +76,23 @@ func TestMountDevTools_Production_NoReflection(t *testing.T) {
 		assert.Equal(t, http.StatusNotFound, res.StatusCode, path)
 	}
 }
+
+func TestMountDevTools_Development_Pprof(t *testing.T) {
+	srv := devServer(t, "development")
+	res, err := http.Get(srv.URL + "/debug/pprof/")
+	require.NoError(t, err)
+	_ = res.Body.Close()
+	assert.Equal(t, http.StatusOK, res.StatusCode)
+}
+
+// TestMountDevTools_Production_NoPprof pins that profiling endpoints (heap,
+// goroutine stacks, CPU on demand) never ship to production.
+func TestMountDevTools_Production_NoPprof(t *testing.T) {
+	srv := devServer(t, "production")
+	for _, path := range []string{"/debug/pprof/", "/debug/pprof/heap", "/debug/pprof/profile?seconds=1"} {
+		res, err := http.Get(srv.URL + path)
+		require.NoError(t, err)
+		_ = res.Body.Close()
+		assert.Equal(t, http.StatusNotFound, res.StatusCode, path)
+	}
+}
