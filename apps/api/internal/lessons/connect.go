@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
+	"google.golang.org/protobuf/proto"
 
 	lessonsv1 "github.com/quocdaijr/qdjr-admin/apps/api/internal/gen/lessons/v1"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/gen/lessons/v1/lessonsv1connect"
@@ -18,6 +20,10 @@ import (
 )
 
 const maxTitleRunes = 200
+
+// watchInterval is how often WatchCourse re-reads a course. A var so tests
+// can shorten it.
+var watchInterval = 2 * time.Second
 
 // maxRequestBytes caps a Connect request body after decompression. connect-go
 // v1 reads the body before interceptors run, so this is what stops an
@@ -248,6 +254,46 @@ func (h *Handler) ReorderLessons(ctx context.Context, req *connect.Request[lesso
 		out = append(out, lessonToProto(l))
 	}
 	return connect.NewResponse(&lessonsv1.ReorderLessonsResponse{Lessons: out}), nil
+}
+
+// WatchCourse streams the course with its lessons: one snapshot on subscribe,
+// then one each time something changes, until the client goes away or the
+// course is deleted (NotFound). Changes are found by re-reading every
+// watchInterval and comparing with the last snapshot sent.
+// ponytail: polling, one GetCourse per watcher per tick; switch to
+// LISTEN/NOTIFY if watchers ever outnumber a couple of admin tabs.
+func (h *Handler) WatchCourse(ctx context.Context, req *connect.Request[lessonsv1.WatchCourseRequest], stream *connect.ServerStream[lessonsv1.WatchCourseResponse]) error {
+	id, err := parseID(req.Msg.GetId())
+	if err != nil {
+		return err
+	}
+	ticker := time.NewTicker(watchInterval)
+	defer ticker.Stop()
+	var last *lessonsv1.WatchCourseResponse
+	for {
+		c, lessons, err := h.repo.GetCourse(ctx, id)
+		if ctx.Err() != nil {
+			return ctx.Err() // client went away mid-read
+		}
+		if err != nil {
+			return mapErr(err)
+		}
+		snap := &lessonsv1.WatchCourseResponse{Course: courseToProto(c), Lessons: make([]*lessonsv1.Lesson, 0, len(lessons))}
+		for _, l := range lessons {
+			snap.Lessons = append(snap.Lessons, lessonToProto(l))
+		}
+		if last == nil || !proto.Equal(last, snap) {
+			if err := stream.Send(snap); err != nil {
+				return err
+			}
+			last = snap
+		}
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C:
+		}
+	}
 }
 
 // --- helpers ---
