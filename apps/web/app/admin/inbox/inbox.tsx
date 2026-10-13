@@ -124,7 +124,7 @@ function InboxTab({ status, active, onSelect }: InboxTabProps) {
                   </TableCell>
                 </TableRow>
               ))
-            ) : isError ? (
+            ) : isError && !data ? (
               <TableRow>
                 <TableCell colSpan={3} className="text-center text-destructive">
                   {error instanceof Error

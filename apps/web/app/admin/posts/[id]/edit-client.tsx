@@ -36,7 +36,9 @@ export function EditPostClient({ id }: { id: string }) {
     );
   }
 
-  if (isError) {
+  // A failed background refetch keeps the post on screen; only a first load
+  // with nothing to show is replaced by the error.
+  if (isError && !data) {
     const message =
       error instanceof ApiError
         ? `${error.code}: ${error.message}`
