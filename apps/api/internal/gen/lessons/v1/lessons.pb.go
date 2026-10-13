@@ -1138,6 +1138,103 @@ func (*DeleteLessonResponse) Descriptor() ([]byte, []int) {
 	return file_lessons_v1_lessons_proto_rawDescGZIP(), []int{17}
 }
 
+type ReorderLessonsRequest struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	CourseId string                 `protobuf:"bytes,1,opt,name=course_id,json=courseId,proto3" json:"course_id,omitempty"`
+	// Every lesson of the course, exactly once, in the new order.
+	LessonIds     []string `protobuf:"bytes,2,rep,name=lesson_ids,json=lessonIds,proto3" json:"lesson_ids,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReorderLessonsRequest) Reset() {
+	*x = ReorderLessonsRequest{}
+	mi := &file_lessons_v1_lessons_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReorderLessonsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReorderLessonsRequest) ProtoMessage() {}
+
+func (x *ReorderLessonsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_lessons_v1_lessons_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReorderLessonsRequest.ProtoReflect.Descriptor instead.
+func (*ReorderLessonsRequest) Descriptor() ([]byte, []int) {
+	return file_lessons_v1_lessons_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *ReorderLessonsRequest) GetCourseId() string {
+	if x != nil {
+		return x.CourseId
+	}
+	return ""
+}
+
+func (x *ReorderLessonsRequest) GetLessonIds() []string {
+	if x != nil {
+		return x.LessonIds
+	}
+	return nil
+}
+
+type ReorderLessonsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Lessons       []*Lesson              `protobuf:"bytes,1,rep,name=lessons,proto3" json:"lessons,omitempty"` // ordered by the new position
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReorderLessonsResponse) Reset() {
+	*x = ReorderLessonsResponse{}
+	mi := &file_lessons_v1_lessons_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReorderLessonsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReorderLessonsResponse) ProtoMessage() {}
+
+func (x *ReorderLessonsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_lessons_v1_lessons_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReorderLessonsResponse.ProtoReflect.Descriptor instead.
+func (*ReorderLessonsResponse) Descriptor() ([]byte, []int) {
+	return file_lessons_v1_lessons_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *ReorderLessonsResponse) GetLessons() []*Lesson {
+	if x != nil {
+		return x.Lessons
+	}
+	return nil
+}
+
 var File_lessons_v1_lessons_proto protoreflect.FileDescriptor
 
 const file_lessons_v1_lessons_proto_rawDesc = "" +
@@ -1229,12 +1326,18 @@ const file_lessons_v1_lessons_proto_rawDesc = "" +
 	"\x06lesson\x18\x01 \x01(\v2\x12.lessons.v1.LessonR\x06lesson\"%\n" +
 	"\x13DeleteLessonRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"\x16\n" +
-	"\x14DeleteLessonResponse*|\n" +
+	"\x14DeleteLessonResponse\"S\n" +
+	"\x15ReorderLessonsRequest\x12\x1b\n" +
+	"\tcourse_id\x18\x01 \x01(\tR\bcourseId\x12\x1d\n" +
+	"\n" +
+	"lesson_ids\x18\x02 \x03(\tR\tlessonIds\"F\n" +
+	"\x16ReorderLessonsResponse\x12,\n" +
+	"\alessons\x18\x01 \x03(\v2\x12.lessons.v1.LessonR\alessons*|\n" +
 	"\fLessonStatus\x12\x1d\n" +
 	"\x19LESSON_STATUS_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12LESSON_STATUS_TODO\x10\x01\x12\x1d\n" +
 	"\x19LESSON_STATUS_IN_PROGRESS\x10\x02\x12\x16\n" +
-	"\x12LESSON_STATUS_DONE\x10\x032\x9c\x05\n" +
+	"\x12LESSON_STATUS_DONE\x10\x032\xf5\x05\n" +
 	"\x0eLessonsService\x12N\n" +
 	"\vListCourses\x12\x1e.lessons.v1.ListCoursesRequest\x1a\x1f.lessons.v1.ListCoursesResponse\x12H\n" +
 	"\tGetCourse\x12\x1c.lessons.v1.GetCourseRequest\x1a\x1d.lessons.v1.GetCourseResponse\x12Q\n" +
@@ -1243,7 +1346,8 @@ const file_lessons_v1_lessons_proto_rawDesc = "" +
 	"\fDeleteCourse\x12\x1f.lessons.v1.DeleteCourseRequest\x1a .lessons.v1.DeleteCourseResponse\x12Q\n" +
 	"\fCreateLesson\x12\x1f.lessons.v1.CreateLessonRequest\x1a .lessons.v1.CreateLessonResponse\x12Q\n" +
 	"\fUpdateLesson\x12\x1f.lessons.v1.UpdateLessonRequest\x1a .lessons.v1.UpdateLessonResponse\x12Q\n" +
-	"\fDeleteLesson\x12\x1f.lessons.v1.DeleteLessonRequest\x1a .lessons.v1.DeleteLessonResponseBLZJgithub.com/quocdaijr/qdjr-admin/apps/api/internal/gen/lessons/v1;lessonsv1b\x06proto3"
+	"\fDeleteLesson\x12\x1f.lessons.v1.DeleteLessonRequest\x1a .lessons.v1.DeleteLessonResponse\x12W\n" +
+	"\x0eReorderLessons\x12!.lessons.v1.ReorderLessonsRequest\x1a\".lessons.v1.ReorderLessonsResponseBLZJgithub.com/quocdaijr/qdjr-admin/apps/api/internal/gen/lessons/v1;lessonsv1b\x06proto3"
 
 var (
 	file_lessons_v1_lessons_proto_rawDescOnce sync.Once
@@ -1258,36 +1362,38 @@ func file_lessons_v1_lessons_proto_rawDescGZIP() []byte {
 }
 
 var file_lessons_v1_lessons_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_lessons_v1_lessons_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
+var file_lessons_v1_lessons_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
 var file_lessons_v1_lessons_proto_goTypes = []any{
-	(LessonStatus)(0),             // 0: lessons.v1.LessonStatus
-	(*Course)(nil),                // 1: lessons.v1.Course
-	(*Lesson)(nil),                // 2: lessons.v1.Lesson
-	(*ListCoursesRequest)(nil),    // 3: lessons.v1.ListCoursesRequest
-	(*ListCoursesResponse)(nil),   // 4: lessons.v1.ListCoursesResponse
-	(*GetCourseRequest)(nil),      // 5: lessons.v1.GetCourseRequest
-	(*GetCourseResponse)(nil),     // 6: lessons.v1.GetCourseResponse
-	(*CreateCourseRequest)(nil),   // 7: lessons.v1.CreateCourseRequest
-	(*CreateCourseResponse)(nil),  // 8: lessons.v1.CreateCourseResponse
-	(*UpdateCourseRequest)(nil),   // 9: lessons.v1.UpdateCourseRequest
-	(*UpdateCourseResponse)(nil),  // 10: lessons.v1.UpdateCourseResponse
-	(*DeleteCourseRequest)(nil),   // 11: lessons.v1.DeleteCourseRequest
-	(*DeleteCourseResponse)(nil),  // 12: lessons.v1.DeleteCourseResponse
-	(*CreateLessonRequest)(nil),   // 13: lessons.v1.CreateLessonRequest
-	(*CreateLessonResponse)(nil),  // 14: lessons.v1.CreateLessonResponse
-	(*UpdateLessonRequest)(nil),   // 15: lessons.v1.UpdateLessonRequest
-	(*UpdateLessonResponse)(nil),  // 16: lessons.v1.UpdateLessonResponse
-	(*DeleteLessonRequest)(nil),   // 17: lessons.v1.DeleteLessonRequest
-	(*DeleteLessonResponse)(nil),  // 18: lessons.v1.DeleteLessonResponse
-	(*timestamppb.Timestamp)(nil), // 19: google.protobuf.Timestamp
+	(LessonStatus)(0),              // 0: lessons.v1.LessonStatus
+	(*Course)(nil),                 // 1: lessons.v1.Course
+	(*Lesson)(nil),                 // 2: lessons.v1.Lesson
+	(*ListCoursesRequest)(nil),     // 3: lessons.v1.ListCoursesRequest
+	(*ListCoursesResponse)(nil),    // 4: lessons.v1.ListCoursesResponse
+	(*GetCourseRequest)(nil),       // 5: lessons.v1.GetCourseRequest
+	(*GetCourseResponse)(nil),      // 6: lessons.v1.GetCourseResponse
+	(*CreateCourseRequest)(nil),    // 7: lessons.v1.CreateCourseRequest
+	(*CreateCourseResponse)(nil),   // 8: lessons.v1.CreateCourseResponse
+	(*UpdateCourseRequest)(nil),    // 9: lessons.v1.UpdateCourseRequest
+	(*UpdateCourseResponse)(nil),   // 10: lessons.v1.UpdateCourseResponse
+	(*DeleteCourseRequest)(nil),    // 11: lessons.v1.DeleteCourseRequest
+	(*DeleteCourseResponse)(nil),   // 12: lessons.v1.DeleteCourseResponse
+	(*CreateLessonRequest)(nil),    // 13: lessons.v1.CreateLessonRequest
+	(*CreateLessonResponse)(nil),   // 14: lessons.v1.CreateLessonResponse
+	(*UpdateLessonRequest)(nil),    // 15: lessons.v1.UpdateLessonRequest
+	(*UpdateLessonResponse)(nil),   // 16: lessons.v1.UpdateLessonResponse
+	(*DeleteLessonRequest)(nil),    // 17: lessons.v1.DeleteLessonRequest
+	(*DeleteLessonResponse)(nil),   // 18: lessons.v1.DeleteLessonResponse
+	(*ReorderLessonsRequest)(nil),  // 19: lessons.v1.ReorderLessonsRequest
+	(*ReorderLessonsResponse)(nil), // 20: lessons.v1.ReorderLessonsResponse
+	(*timestamppb.Timestamp)(nil),  // 21: google.protobuf.Timestamp
 }
 var file_lessons_v1_lessons_proto_depIdxs = []int32{
-	19, // 0: lessons.v1.Course.created_at:type_name -> google.protobuf.Timestamp
-	19, // 1: lessons.v1.Course.updated_at:type_name -> google.protobuf.Timestamp
+	21, // 0: lessons.v1.Course.created_at:type_name -> google.protobuf.Timestamp
+	21, // 1: lessons.v1.Course.updated_at:type_name -> google.protobuf.Timestamp
 	0,  // 2: lessons.v1.Lesson.status:type_name -> lessons.v1.LessonStatus
-	19, // 3: lessons.v1.Lesson.completed_at:type_name -> google.protobuf.Timestamp
-	19, // 4: lessons.v1.Lesson.created_at:type_name -> google.protobuf.Timestamp
-	19, // 5: lessons.v1.Lesson.updated_at:type_name -> google.protobuf.Timestamp
+	21, // 3: lessons.v1.Lesson.completed_at:type_name -> google.protobuf.Timestamp
+	21, // 4: lessons.v1.Lesson.created_at:type_name -> google.protobuf.Timestamp
+	21, // 5: lessons.v1.Lesson.updated_at:type_name -> google.protobuf.Timestamp
 	1,  // 6: lessons.v1.ListCoursesResponse.courses:type_name -> lessons.v1.Course
 	1,  // 7: lessons.v1.GetCourseResponse.course:type_name -> lessons.v1.Course
 	2,  // 8: lessons.v1.GetCourseResponse.lessons:type_name -> lessons.v1.Lesson
@@ -1296,27 +1402,30 @@ var file_lessons_v1_lessons_proto_depIdxs = []int32{
 	2,  // 11: lessons.v1.CreateLessonResponse.lesson:type_name -> lessons.v1.Lesson
 	0,  // 12: lessons.v1.UpdateLessonRequest.status:type_name -> lessons.v1.LessonStatus
 	2,  // 13: lessons.v1.UpdateLessonResponse.lesson:type_name -> lessons.v1.Lesson
-	3,  // 14: lessons.v1.LessonsService.ListCourses:input_type -> lessons.v1.ListCoursesRequest
-	5,  // 15: lessons.v1.LessonsService.GetCourse:input_type -> lessons.v1.GetCourseRequest
-	7,  // 16: lessons.v1.LessonsService.CreateCourse:input_type -> lessons.v1.CreateCourseRequest
-	9,  // 17: lessons.v1.LessonsService.UpdateCourse:input_type -> lessons.v1.UpdateCourseRequest
-	11, // 18: lessons.v1.LessonsService.DeleteCourse:input_type -> lessons.v1.DeleteCourseRequest
-	13, // 19: lessons.v1.LessonsService.CreateLesson:input_type -> lessons.v1.CreateLessonRequest
-	15, // 20: lessons.v1.LessonsService.UpdateLesson:input_type -> lessons.v1.UpdateLessonRequest
-	17, // 21: lessons.v1.LessonsService.DeleteLesson:input_type -> lessons.v1.DeleteLessonRequest
-	4,  // 22: lessons.v1.LessonsService.ListCourses:output_type -> lessons.v1.ListCoursesResponse
-	6,  // 23: lessons.v1.LessonsService.GetCourse:output_type -> lessons.v1.GetCourseResponse
-	8,  // 24: lessons.v1.LessonsService.CreateCourse:output_type -> lessons.v1.CreateCourseResponse
-	10, // 25: lessons.v1.LessonsService.UpdateCourse:output_type -> lessons.v1.UpdateCourseResponse
-	12, // 26: lessons.v1.LessonsService.DeleteCourse:output_type -> lessons.v1.DeleteCourseResponse
-	14, // 27: lessons.v1.LessonsService.CreateLesson:output_type -> lessons.v1.CreateLessonResponse
-	16, // 28: lessons.v1.LessonsService.UpdateLesson:output_type -> lessons.v1.UpdateLessonResponse
-	18, // 29: lessons.v1.LessonsService.DeleteLesson:output_type -> lessons.v1.DeleteLessonResponse
-	22, // [22:30] is the sub-list for method output_type
-	14, // [14:22] is the sub-list for method input_type
-	14, // [14:14] is the sub-list for extension type_name
-	14, // [14:14] is the sub-list for extension extendee
-	0,  // [0:14] is the sub-list for field type_name
+	2,  // 14: lessons.v1.ReorderLessonsResponse.lessons:type_name -> lessons.v1.Lesson
+	3,  // 15: lessons.v1.LessonsService.ListCourses:input_type -> lessons.v1.ListCoursesRequest
+	5,  // 16: lessons.v1.LessonsService.GetCourse:input_type -> lessons.v1.GetCourseRequest
+	7,  // 17: lessons.v1.LessonsService.CreateCourse:input_type -> lessons.v1.CreateCourseRequest
+	9,  // 18: lessons.v1.LessonsService.UpdateCourse:input_type -> lessons.v1.UpdateCourseRequest
+	11, // 19: lessons.v1.LessonsService.DeleteCourse:input_type -> lessons.v1.DeleteCourseRequest
+	13, // 20: lessons.v1.LessonsService.CreateLesson:input_type -> lessons.v1.CreateLessonRequest
+	15, // 21: lessons.v1.LessonsService.UpdateLesson:input_type -> lessons.v1.UpdateLessonRequest
+	17, // 22: lessons.v1.LessonsService.DeleteLesson:input_type -> lessons.v1.DeleteLessonRequest
+	19, // 23: lessons.v1.LessonsService.ReorderLessons:input_type -> lessons.v1.ReorderLessonsRequest
+	4,  // 24: lessons.v1.LessonsService.ListCourses:output_type -> lessons.v1.ListCoursesResponse
+	6,  // 25: lessons.v1.LessonsService.GetCourse:output_type -> lessons.v1.GetCourseResponse
+	8,  // 26: lessons.v1.LessonsService.CreateCourse:output_type -> lessons.v1.CreateCourseResponse
+	10, // 27: lessons.v1.LessonsService.UpdateCourse:output_type -> lessons.v1.UpdateCourseResponse
+	12, // 28: lessons.v1.LessonsService.DeleteCourse:output_type -> lessons.v1.DeleteCourseResponse
+	14, // 29: lessons.v1.LessonsService.CreateLesson:output_type -> lessons.v1.CreateLessonResponse
+	16, // 30: lessons.v1.LessonsService.UpdateLesson:output_type -> lessons.v1.UpdateLessonResponse
+	18, // 31: lessons.v1.LessonsService.DeleteLesson:output_type -> lessons.v1.DeleteLessonResponse
+	20, // 32: lessons.v1.LessonsService.ReorderLessons:output_type -> lessons.v1.ReorderLessonsResponse
+	24, // [24:33] is the sub-list for method output_type
+	15, // [15:24] is the sub-list for method input_type
+	15, // [15:15] is the sub-list for extension type_name
+	15, // [15:15] is the sub-list for extension extendee
+	0,  // [0:15] is the sub-list for field type_name
 }
 
 func init() { file_lessons_v1_lessons_proto_init() }
@@ -1333,7 +1442,7 @@ func file_lessons_v1_lessons_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_lessons_v1_lessons_proto_rawDesc), len(file_lessons_v1_lessons_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   18,
+			NumMessages:   20,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -70,3 +70,39 @@ test('lessons: server field error shows under the title input', async ({ page })
   await expect(dialog.getByText('title must be 1..200 characters')).toBeVisible();
   await expect(dialog).toBeVisible();
 });
+
+test('lessons: reorder with the up and down buttons', async ({ page }) => {
+  const suffix = randomSuffix();
+  const courseTitle = `e2e-reorder-${suffix}`;
+  await login(page);
+  await page.goto('/admin/lessons');
+  await page.getByRole('button', { name: 'New course' }).click();
+  await page.getByRole('dialog').getByLabel('Title').fill(courseTitle);
+  await page.getByRole('dialog').getByRole('button', { name: 'Create' }).click();
+  await page.getByRole('link', { name: courseTitle }).click();
+
+  for (const t of ['first', 'second']) {
+    await page.getByRole('button', { name: 'New lesson' }).click();
+    await page.getByRole('dialog').getByLabel('Title').fill(t);
+    await page.getByRole('dialog').getByRole('button', { name: 'Add' }).click();
+    await expect(page.getByRole('dialog')).toBeHidden();
+  }
+  const rows = page.locator('tbody tr');
+  await expect(rows.nth(0)).toContainText('first');
+  await expect(page.getByRole('button', { name: 'Move first up' })).toBeDisabled();
+
+  await page.getByRole('button', { name: 'Move second up' }).click();
+  await expect(rows.nth(0)).toContainText('second');
+  await expect(rows.nth(1)).toContainText('first');
+
+  // Survives a reload: the order is stored, not just rendered.
+  await page.reload();
+  await expect(rows.nth(0)).toContainText('second');
+
+  await page.goto('/admin/lessons');
+  const row = page.getByRole('row', { name: new RegExp(courseTitle) });
+  await row.getByRole('button', { name: 'Actions' }).click();
+  await page.getByRole('menuitem', { name: 'Delete' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Delete' }).click();
+  await expect(page.getByRole('row', { name: new RegExp(courseTitle) })).toHaveCount(0);
+});

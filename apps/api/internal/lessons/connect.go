@@ -215,6 +215,41 @@ func (h *Handler) DeleteLesson(ctx context.Context, req *connect.Request[lessons
 	return connect.NewResponse(&lessonsv1.DeleteLessonResponse{}), nil
 }
 
+// ReorderLessons sets the course's lesson order. lesson_ids must name every
+// lesson of the course exactly once; the repository enforces the set match.
+func (h *Handler) ReorderLessons(ctx context.Context, req *connect.Request[lessonsv1.ReorderLessonsRequest]) (*connect.Response[lessonsv1.ReorderLessonsResponse], error) {
+	courseID, err := parseID(req.Msg.GetCourseId())
+	if err != nil {
+		return nil, err
+	}
+	raw := req.Msg.GetLessonIds()
+	ids := make([]uuid.UUID, 0, len(raw))
+	seen := make(map[uuid.UUID]bool, len(raw))
+	for _, s := range raw {
+		id, err := uuid.Parse(s)
+		if err != nil {
+			return nil, invalidField("lesson_ids", "invalid lesson id")
+		}
+		if seen[id] {
+			return nil, invalidField("lesson_ids", "duplicate lesson id")
+		}
+		seen[id] = true
+		ids = append(ids, id)
+	}
+	lessons, err := h.repo.ReorderLessons(ctx, courseID, ids)
+	if errors.Is(err, ErrLessonSetMismatch) {
+		return nil, invalidField("lesson_ids", "lesson_ids must list every lesson of the course exactly once")
+	}
+	if err != nil {
+		return nil, mapErr(err)
+	}
+	out := make([]*lessonsv1.Lesson, 0, len(lessons))
+	for _, l := range lessons {
+		out = append(out, lessonToProto(l))
+	}
+	return connect.NewResponse(&lessonsv1.ReorderLessonsResponse{Lessons: out}), nil
+}
+
 // --- helpers ---
 
 func invalid(msg string) error {

@@ -238,6 +238,60 @@ func (r *AdminRepository) DeleteLesson(ctx context.Context, id uuid.UUID) error 
 	return r.execDelete(ctx, "public.lessons", id)
 }
 
+// ReorderLessons rewrites positions 1..n in one transaction. The course row
+// is locked so two reorders of the same course serialise, and the ids must be
+// exactly the course's lessons (no missing, extra, foreign or repeated ids),
+// otherwise ErrLessonSetMismatch and nothing changes.
+func (r *AdminRepository) ReorderLessons(ctx context.Context, courseID uuid.UUID, ids []uuid.UUID) ([]Lesson, error) {
+	idStrs := make([]string, 0, len(ids))
+	for _, id := range ids {
+		idStrs = append(idStrs, id.String())
+	}
+
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("lessons reorder begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }() // no-op once committed
+
+	var locked int
+	err = tx.QueryRow(ctx, `SELECT 1 FROM public.courses WHERE id = $1 FOR UPDATE`, courseID).Scan(&locked)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("lessons reorder lock course: %w", err)
+	}
+
+	// total lessons in the course, and how many of them the request names.
+	// Equal to len(ids) on both counts means the sets match exactly.
+	var total, named int
+	const countSQL = `
+        SELECT count(*), count(*) FILTER (WHERE id = ANY($2::uuid[]))
+        FROM public.lessons WHERE course_id = $1`
+	if err := tx.QueryRow(ctx, countSQL, courseID, idStrs).Scan(&total, &named); err != nil {
+		return nil, fmt.Errorf("lessons reorder count: %w", err)
+	}
+	if total != len(ids) || named != len(ids) {
+		return nil, ErrLessonSetMismatch
+	}
+
+	const updateSQL = `
+        UPDATE public.lessons l
+        SET position = v.ord::int, updated_at = now()
+        FROM unnest($2::uuid[]) WITH ORDINALITY AS v(id, ord)
+        WHERE l.id = v.id AND l.course_id = $1`
+	if _, err := tx.Exec(ctx, updateSQL, courseID, idStrs); err != nil {
+		return nil, fmt.Errorf("lessons reorder update: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("lessons reorder commit: %w", err)
+	}
+
+	_, lessons, err := r.GetCourse(ctx, courseID)
+	return lessons, err
+}
+
 func (r *AdminRepository) getLesson(ctx context.Context, id uuid.UUID) (Lesson, error) {
 	l, err := scanLesson(r.pool.QueryRow(ctx, `SELECT `+lessonColumns+` FROM public.lessons WHERE id = $1`, id))
 	if errors.Is(err, pgx.ErrNoRows) {
