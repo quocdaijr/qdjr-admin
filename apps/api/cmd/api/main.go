@@ -20,6 +20,7 @@ import (
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/config"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/contact"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/db"
+	"github.com/quocdaijr/qdjr-admin/apps/api/internal/gen/lessons/v1/lessonsv1connect"
 	apphttp "github.com/quocdaijr/qdjr-admin/apps/api/internal/http"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/lessons"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/media"
@@ -165,6 +166,7 @@ func run() error {
 	mux := http.NewServeMux()
 	lessonsPath, lessonsHandler := lessons.NewConnectHandler(lessonsRepo, apphttp.RPCLog(log), apphttp.RPCAuth(issuer, resolver, "lessons:write"))
 	mux.Handle(lessonsPath, apphttp.ConnectCORS(cfg.CORSOrigins)(lessonsHandler))
+	apphttp.MountDevTools(mux, cfg.Env, lessonsv1connect.LessonsServiceName)
 	mux.Handle("/", r)
 
 	// h2c lets native gRPC clients (grpcurl -plaintext) reach the handler
