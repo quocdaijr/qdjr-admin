@@ -176,3 +176,65 @@ func TestRepo_DeleteLesson(t *testing.T) {
 	require.NoError(t, f.repo.DeleteLesson(f.ctx, l.ID))
 	assert.ErrorIs(t, f.repo.DeleteLesson(f.ctx, l.ID), ErrNotFound)
 }
+
+func (f *fixture) lessonsOf(c Course, titles ...string) []Lesson {
+	f.t.Helper()
+	out := make([]Lesson, 0, len(titles))
+	for _, title := range titles {
+		l, err := f.repo.CreateLesson(f.ctx, CreateLessonInput{CourseID: c.ID, Title: title})
+		require.NoError(f.t, err)
+		out = append(out, l)
+	}
+	return out
+}
+
+func titlesOf(ls []Lesson) []string {
+	out := make([]string, 0, len(ls))
+	for _, l := range ls {
+		out = append(out, l.Title)
+	}
+	return out
+}
+
+func TestRepo_ReorderLessons_Reverses(t *testing.T) {
+	f := newFixture(t)
+	c := f.course("repo-reorder-" + uuid.NewString()[:8])
+	ls := f.lessonsOf(c, "a", "b", "c")
+
+	got, err := f.repo.ReorderLessons(f.ctx, c.ID, []uuid.UUID{ls[2].ID, ls[1].ID, ls[0].ID})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"c", "b", "a"}, titlesOf(got))
+	for i, l := range got {
+		assert.Equal(t, i+1, l.Position)
+	}
+
+	_, stored, err := f.repo.GetCourse(f.ctx, c.ID)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"c", "b", "a"}, titlesOf(stored))
+}
+
+func TestRepo_ReorderLessons_Mismatch_LeavesOrder(t *testing.T) {
+	f := newFixture(t)
+	c := f.course("repo-reorder-bad-" + uuid.NewString()[:8])
+	ls := f.lessonsOf(c, "a", "b")
+	other := f.course("repo-reorder-other-" + uuid.NewString()[:8])
+	foreign := f.lessonsOf(other, "x")
+
+	for name, ids := range map[string][]uuid.UUID{
+		"missing one": {ls[1].ID},
+		"foreign id":  {ls[1].ID, foreign[0].ID},
+		"extra id":    {ls[1].ID, ls[0].ID, foreign[0].ID},
+	} {
+		_, err := f.repo.ReorderLessons(f.ctx, c.ID, ids)
+		assert.ErrorIs(t, err, ErrLessonSetMismatch, name)
+	}
+	_, stored, err := f.repo.GetCourse(f.ctx, c.ID)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"a", "b"}, titlesOf(stored))
+}
+
+func TestRepo_ReorderLessons_UnknownCourse_NotFound(t *testing.T) {
+	f := newFixture(t)
+	_, err := f.repo.ReorderLessons(f.ctx, uuid.New(), nil)
+	assert.ErrorIs(t, err, ErrNotFound)
+}

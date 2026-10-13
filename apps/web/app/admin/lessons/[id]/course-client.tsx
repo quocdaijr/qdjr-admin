@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { timestampDate } from '@bufbuild/protobuf/wkt';
-import { MoreHorizontal } from 'lucide-react';
+import { ChevronDown, ChevronUp, MoreHorizontal } from 'lucide-react';
 import { toast } from 'sonner';
 
 import type { Lesson } from '@/gen/lessons/v1/lessons_pb';
@@ -58,6 +58,12 @@ export function CourseClient({ id }: { id: string }) {
     onError: (err) => toast.error(rpcErrorMessage(err, 'Status change failed')),
   });
 
+  const reorderMutation = useMutation({
+    mutationFn: (lessonIds: string[]) => lessonsClient.reorderLessons({ courseId: id, lessonIds }),
+    onSuccess: invalidate,
+    onError: (err) => toast.error(rpcErrorMessage(err, 'Reorder failed')),
+  });
+
   const deleteMutation = useMutation({
     mutationFn: (lessonId: string) => lessonsClient.deleteLesson({ id: lessonId }),
     onSuccess: () => {
@@ -84,6 +90,13 @@ export function CourseClient({ id }: { id: string }) {
 
   const course = data.course;
   const lessons = data.lessons;
+
+  // Swap two neighbours in a fresh id list; the cached response is untouched.
+  const moveLesson = (from: number, to: number) => {
+    const ids = lessons.map((l) => l.id);
+    [ids[from], ids[to]] = [ids[to], ids[from]];
+    reorderMutation.mutate(ids);
+  };
 
   return (
     <div className="flex flex-col gap-4">
@@ -126,7 +139,7 @@ export function CourseClient({ id }: { id: string }) {
               <TableHead>Lesson</TableHead>
               <TableHead className="w-[180px]">Status</TableHead>
               <TableHead>Completed</TableHead>
-              <TableHead className="w-[60px]" />
+              <TableHead className="w-[120px]" />
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -137,7 +150,7 @@ export function CourseClient({ id }: { id: string }) {
                 </TableCell>
               </TableRow>
             ) : (
-              lessons.map((lesson) => (
+              lessons.map((lesson, index) => (
                 <TableRow key={lesson.id}>
                   <TableCell className="font-mono text-[11px] text-muted-foreground">{lesson.position}</TableCell>
                   <TableCell className="font-medium">
@@ -175,18 +188,38 @@ export function CourseClient({ id }: { id: string }) {
                     {lesson.completedAt ? timestampDate(lesson.completedAt).toLocaleDateString() : '—'}
                   </TableCell>
                   <TableCell>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" aria-label="Actions" />}>
-                        <MoreHorizontal className="size-4" />
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => setEditLesson(lesson)}>Edit</DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem variant="destructive" onClick={() => setPendingDelete(lesson)}>
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                    <div className="flex items-center justify-end gap-0.5">
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={`Move ${lesson.title} up`}
+                        disabled={index === 0 || reorderMutation.isPending}
+                        onClick={() => moveLesson(index, index - 1)}
+                      >
+                        <ChevronUp className="size-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={`Move ${lesson.title} down`}
+                        disabled={index === lessons.length - 1 || reorderMutation.isPending}
+                        onClick={() => moveLesson(index, index + 1)}
+                      >
+                        <ChevronDown className="size-4" />
+                      </Button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" aria-label="Actions" />}>
+                          <MoreHorizontal className="size-4" />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => setEditLesson(lesson)}>Edit</DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem variant="destructive" onClick={() => setPendingDelete(lesson)}>
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))

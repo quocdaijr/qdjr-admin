@@ -112,6 +112,15 @@ message DeleteLessonRequest {
 }
 message DeleteLessonResponse {}
 
+message ReorderLessonsRequest {
+  string course_id = 1;
+  // Every lesson of the course, exactly once, in the new order.
+  repeated string lesson_ids = 2;
+}
+message ReorderLessonsResponse {
+  repeated Lesson lessons = 1; // ordered by the new position
+}
+
 service LessonsService {
   rpc ListCourses(ListCoursesRequest) returns (ListCoursesResponse);
   rpc GetCourse(GetCourseRequest) returns (GetCourseResponse);
@@ -121,4 +130,5 @@ service LessonsService {
   rpc CreateLesson(CreateLessonRequest) returns (CreateLessonResponse);
   rpc UpdateLesson(UpdateLessonRequest) returns (UpdateLessonResponse);
   rpc DeleteLesson(DeleteLessonRequest) returns (DeleteLessonResponse);
+  rpc ReorderLessons(ReorderLessonsRequest) returns (ReorderLessonsResponse);
 }

@@ -33,6 +33,10 @@ func ValidStatus(s Status) bool {
 // ErrNotFound is returned when no course or lesson matches the id.
 var ErrNotFound = errors.New("lessons: not found")
 
+// ErrLessonSetMismatch is returned by ReorderLessons when the ids are not
+// exactly the course's lessons (missing, extra or foreign ids).
+var ErrLessonSetMismatch = errors.New("lessons: ids must be exactly the course's lessons")
+
 // Course is one external thing being studied. LessonCount and DoneCount are
 // derived from its lessons by the repository and never stored.
 type Course struct {
@@ -116,4 +120,7 @@ type AdminWriter interface {
 	CreateLesson(ctx context.Context, in CreateLessonInput) (Lesson, error)
 	UpdateLesson(ctx context.Context, id uuid.UUID, in UpdateLessonInput) (Lesson, error)
 	DeleteLesson(ctx context.Context, id uuid.UUID) error
+	// ReorderLessons sets positions 1..n in the order of ids and returns the
+	// lessons in that order.
+	ReorderLessons(ctx context.Context, courseID uuid.UUID, ids []uuid.UUID) ([]Lesson, error)
 }

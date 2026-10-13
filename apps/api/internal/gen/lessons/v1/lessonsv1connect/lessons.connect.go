@@ -57,6 +57,9 @@ const (
 	// LessonsServiceDeleteLessonProcedure is the fully-qualified name of the LessonsService's
 	// DeleteLesson RPC.
 	LessonsServiceDeleteLessonProcedure = "/lessons.v1.LessonsService/DeleteLesson"
+	// LessonsServiceReorderLessonsProcedure is the fully-qualified name of the LessonsService's
+	// ReorderLessons RPC.
+	LessonsServiceReorderLessonsProcedure = "/lessons.v1.LessonsService/ReorderLessons"
 )
 
 // LessonsServiceClient is a client for the lessons.v1.LessonsService service.
@@ -69,6 +72,7 @@ type LessonsServiceClient interface {
 	CreateLesson(context.Context, *connect.Request[v1.CreateLessonRequest]) (*connect.Response[v1.CreateLessonResponse], error)
 	UpdateLesson(context.Context, *connect.Request[v1.UpdateLessonRequest]) (*connect.Response[v1.UpdateLessonResponse], error)
 	DeleteLesson(context.Context, *connect.Request[v1.DeleteLessonRequest]) (*connect.Response[v1.DeleteLessonResponse], error)
+	ReorderLessons(context.Context, *connect.Request[v1.ReorderLessonsRequest]) (*connect.Response[v1.ReorderLessonsResponse], error)
 }
 
 // NewLessonsServiceClient constructs a client for the lessons.v1.LessonsService service. By
@@ -130,19 +134,26 @@ func NewLessonsServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(lessonsServiceMethods.ByName("DeleteLesson")),
 			connect.WithClientOptions(opts...),
 		),
+		reorderLessons: connect.NewClient[v1.ReorderLessonsRequest, v1.ReorderLessonsResponse](
+			httpClient,
+			baseURL+LessonsServiceReorderLessonsProcedure,
+			connect.WithSchema(lessonsServiceMethods.ByName("ReorderLessons")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // lessonsServiceClient implements LessonsServiceClient.
 type lessonsServiceClient struct {
-	listCourses  *connect.Client[v1.ListCoursesRequest, v1.ListCoursesResponse]
-	getCourse    *connect.Client[v1.GetCourseRequest, v1.GetCourseResponse]
-	createCourse *connect.Client[v1.CreateCourseRequest, v1.CreateCourseResponse]
-	updateCourse *connect.Client[v1.UpdateCourseRequest, v1.UpdateCourseResponse]
-	deleteCourse *connect.Client[v1.DeleteCourseRequest, v1.DeleteCourseResponse]
-	createLesson *connect.Client[v1.CreateLessonRequest, v1.CreateLessonResponse]
-	updateLesson *connect.Client[v1.UpdateLessonRequest, v1.UpdateLessonResponse]
-	deleteLesson *connect.Client[v1.DeleteLessonRequest, v1.DeleteLessonResponse]
+	listCourses    *connect.Client[v1.ListCoursesRequest, v1.ListCoursesResponse]
+	getCourse      *connect.Client[v1.GetCourseRequest, v1.GetCourseResponse]
+	createCourse   *connect.Client[v1.CreateCourseRequest, v1.CreateCourseResponse]
+	updateCourse   *connect.Client[v1.UpdateCourseRequest, v1.UpdateCourseResponse]
+	deleteCourse   *connect.Client[v1.DeleteCourseRequest, v1.DeleteCourseResponse]
+	createLesson   *connect.Client[v1.CreateLessonRequest, v1.CreateLessonResponse]
+	updateLesson   *connect.Client[v1.UpdateLessonRequest, v1.UpdateLessonResponse]
+	deleteLesson   *connect.Client[v1.DeleteLessonRequest, v1.DeleteLessonResponse]
+	reorderLessons *connect.Client[v1.ReorderLessonsRequest, v1.ReorderLessonsResponse]
 }
 
 // ListCourses calls lessons.v1.LessonsService.ListCourses.
@@ -185,6 +196,11 @@ func (c *lessonsServiceClient) DeleteLesson(ctx context.Context, req *connect.Re
 	return c.deleteLesson.CallUnary(ctx, req)
 }
 
+// ReorderLessons calls lessons.v1.LessonsService.ReorderLessons.
+func (c *lessonsServiceClient) ReorderLessons(ctx context.Context, req *connect.Request[v1.ReorderLessonsRequest]) (*connect.Response[v1.ReorderLessonsResponse], error) {
+	return c.reorderLessons.CallUnary(ctx, req)
+}
+
 // LessonsServiceHandler is an implementation of the lessons.v1.LessonsService service.
 type LessonsServiceHandler interface {
 	ListCourses(context.Context, *connect.Request[v1.ListCoursesRequest]) (*connect.Response[v1.ListCoursesResponse], error)
@@ -195,6 +211,7 @@ type LessonsServiceHandler interface {
 	CreateLesson(context.Context, *connect.Request[v1.CreateLessonRequest]) (*connect.Response[v1.CreateLessonResponse], error)
 	UpdateLesson(context.Context, *connect.Request[v1.UpdateLessonRequest]) (*connect.Response[v1.UpdateLessonResponse], error)
 	DeleteLesson(context.Context, *connect.Request[v1.DeleteLessonRequest]) (*connect.Response[v1.DeleteLessonResponse], error)
+	ReorderLessons(context.Context, *connect.Request[v1.ReorderLessonsRequest]) (*connect.Response[v1.ReorderLessonsResponse], error)
 }
 
 // NewLessonsServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -252,6 +269,12 @@ func NewLessonsServiceHandler(svc LessonsServiceHandler, opts ...connect.Handler
 		connect.WithSchema(lessonsServiceMethods.ByName("DeleteLesson")),
 		connect.WithHandlerOptions(opts...),
 	)
+	lessonsServiceReorderLessonsHandler := connect.NewUnaryHandler(
+		LessonsServiceReorderLessonsProcedure,
+		svc.ReorderLessons,
+		connect.WithSchema(lessonsServiceMethods.ByName("ReorderLessons")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/lessons.v1.LessonsService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case LessonsServiceListCoursesProcedure:
@@ -270,6 +293,8 @@ func NewLessonsServiceHandler(svc LessonsServiceHandler, opts ...connect.Handler
 			lessonsServiceUpdateLessonHandler.ServeHTTP(w, r)
 		case LessonsServiceDeleteLessonProcedure:
 			lessonsServiceDeleteLessonHandler.ServeHTTP(w, r)
+		case LessonsServiceReorderLessonsProcedure:
+			lessonsServiceReorderLessonsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -309,4 +334,8 @@ func (UnimplementedLessonsServiceHandler) UpdateLesson(context.Context, *connect
 
 func (UnimplementedLessonsServiceHandler) DeleteLesson(context.Context, *connect.Request[v1.DeleteLessonRequest]) (*connect.Response[v1.DeleteLessonResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("lessons.v1.LessonsService.DeleteLesson is not implemented"))
+}
+
+func (UnimplementedLessonsServiceHandler) ReorderLessons(context.Context, *connect.Request[v1.ReorderLessonsRequest]) (*connect.Response[v1.ReorderLessonsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("lessons.v1.LessonsService.ReorderLessons is not implemented"))
 }

@@ -48,6 +48,8 @@ type stubRepo struct {
 	listFilt       ListFilter
 	createCourseIn CreateCourseInput
 	updateLessonIn UpdateLessonInput
+	reorderIDs     []uuid.UUID
+	reorderErr     error
 }
 
 func newStubRepo() *stubRepo {
@@ -381,4 +383,84 @@ func TestRPC_CreateCourse_LongTitle_FieldViolation(t *testing.T) {
 	require.Len(t, br.GetFieldViolations(), 1)
 	assert.Equal(t, "title", br.GetFieldViolations()[0].GetField())
 	assert.Contains(t, br.GetFieldViolations()[0].GetDescription(), "200")
+}
+
+func (s *stubRepo) ReorderLessons(_ context.Context, courseID uuid.UUID, ids []uuid.UUID) ([]Lesson, error) {
+	s.reorderIDs = ids
+	if s.reorderErr != nil {
+		return nil, s.reorderErr
+	}
+	if _, ok := s.courses[courseID]; !ok {
+		return nil, ErrNotFound
+	}
+	out := make([]Lesson, 0, len(ids))
+	for i, id := range ids {
+		l := s.lessons[id]
+		l.Position = i + 1
+		out = append(out, l)
+	}
+	return out, nil
+}
+
+func fieldOf(t *testing.T, err error) string {
+	t.Helper()
+	var cerr *connect.Error
+	require.ErrorAs(t, err, &cerr)
+	require.NotEmpty(t, cerr.Details())
+	v, derr := cerr.Details()[0].Value()
+	require.NoError(t, derr)
+	br, ok := v.(*errdetails.BadRequest)
+	require.True(t, ok)
+	return br.GetFieldViolations()[0].GetField()
+}
+
+func TestRPC_ReorderLessons_OK_PassesOrder(t *testing.T) {
+	e := newEnv(t, "lessons:write")
+	c := e.client(t, uuid.New())
+	course, err := c.CreateCourse(context.Background(), connect.NewRequest(&lessonsv1.CreateCourseRequest{Title: "c"}))
+	require.NoError(t, err)
+	cid := course.Msg.GetCourse().GetId()
+	a, err := c.CreateLesson(context.Background(), connect.NewRequest(&lessonsv1.CreateLessonRequest{CourseId: cid, Title: "a"}))
+	require.NoError(t, err)
+	b, err := c.CreateLesson(context.Background(), connect.NewRequest(&lessonsv1.CreateLessonRequest{CourseId: cid, Title: "b"}))
+	require.NoError(t, err)
+
+	res, err := c.ReorderLessons(context.Background(), connect.NewRequest(&lessonsv1.ReorderLessonsRequest{
+		CourseId: cid, LessonIds: []string{b.Msg.GetLesson().GetId(), a.Msg.GetLesson().GetId()},
+	}))
+	require.NoError(t, err)
+	require.Len(t, res.Msg.GetLessons(), 2)
+	assert.Equal(t, "b", res.Msg.GetLessons()[0].GetTitle())
+	assert.Equal(t, int32(1), res.Msg.GetLessons()[0].GetPosition())
+	assert.Len(t, e.repo.reorderIDs, 2)
+}
+
+func TestRPC_ReorderLessons_Duplicate_InvalidArgument(t *testing.T) {
+	e := newEnv(t, "lessons:write")
+	id := uuid.NewString()
+	_, err := e.client(t, uuid.New()).ReorderLessons(context.Background(), connect.NewRequest(&lessonsv1.ReorderLessonsRequest{
+		CourseId: uuid.NewString(), LessonIds: []string{id, id},
+	}))
+	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, "lesson_ids", fieldOf(t, err))
+	assert.Nil(t, e.repo.reorderIDs, "repo must not be called")
+}
+
+func TestRPC_ReorderLessons_BadLessonID_InvalidArgument(t *testing.T) {
+	e := newEnv(t, "lessons:write")
+	_, err := e.client(t, uuid.New()).ReorderLessons(context.Background(), connect.NewRequest(&lessonsv1.ReorderLessonsRequest{
+		CourseId: uuid.NewString(), LessonIds: []string{"nope"},
+	}))
+	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, "lesson_ids", fieldOf(t, err))
+}
+
+func TestRPC_ReorderLessons_Mismatch_InvalidArgument(t *testing.T) {
+	e := newEnv(t, "lessons:write")
+	e.repo.reorderErr = ErrLessonSetMismatch
+	_, err := e.client(t, uuid.New()).ReorderLessons(context.Background(), connect.NewRequest(&lessonsv1.ReorderLessonsRequest{
+		CourseId: uuid.NewString(), LessonIds: []string{uuid.NewString()},
+	}))
+	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, "lesson_ids", fieldOf(t, err))
 }
