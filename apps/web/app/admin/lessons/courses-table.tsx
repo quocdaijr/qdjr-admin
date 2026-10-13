@@ -114,7 +114,7 @@ export function CoursesTable() {
                   <TableCell />
                 </TableRow>
               ))
-            ) : isError ? (
+            ) : isError && !data ? (
               <TableRow>
                 <TableCell colSpan={5} className="text-center text-destructive">
                   {rpcErrorMessage(error, 'Failed to load courses')}
