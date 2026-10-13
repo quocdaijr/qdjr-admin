@@ -12,6 +12,7 @@
     "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
     "lint": "eslint",
     "test:e2e": "playwright test",
+    "rpc:list": "tsx scripts/list-courses.ts",
     "proto:gen": "cd ../.. && buf lint && buf generate && buf generate --template buf.gen.errdetails.yaml"
   },
   "dependencies": {
@@ -38,6 +39,7 @@
   },
   "devDependencies": {
     "@bufbuild/buf": "1.73.0",
+    "@connectrpc/connect-node": "2.2.0",
     "@playwright/test": "^1.64.0",
     "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^26.6.5",
@@ -47,6 +49,7 @@
     "eslint": "^9.39.5",
     "eslint-config-next": "16.3.8",
     "tailwindcss": "^4.3.3",
+    "tsx": "4.23.15",
     "typescript": "npm:@typescript/typescript6@^6.0.2",
     "wrangler": "^4.149.0"
   }
