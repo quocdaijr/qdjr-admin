@@ -8,7 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"connectrpc.com/grpcreflect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
+	"connectrpc.com/grpcreflect/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -48,10 +50,10 @@ func TestMountDevTools_Development_ReflectionListsServices(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	stream := grpcreflect.NewClient(h2cClient(), srv.URL).NewStream(ctx)
+	stream := grpcreflect.NewClient(connect.NewClient(connecthttp.NewTransport(h2cClient(), srv.URL))).NewStream(ctx)
 	names, err := stream.ListServices()
 	require.NoError(t, err)
-	_, _ = stream.Close()
+	_ = stream.Close()
 	var got []string
 	for _, n := range names {
 		got = append(got, string(n))

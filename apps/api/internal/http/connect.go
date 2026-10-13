@@ -3,13 +3,15 @@ package http
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"slices"
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/auth"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/rbac"
@@ -41,110 +43,108 @@ func ConnectCORS(allowed []string) func(http.Handler) http.Handler {
 	}
 }
 
-// RPCAuth verifies the bearer token and the permission for every call the
-// handler serves, unary and streaming, so each protocol (Connect, gRPC,
-// gRPC-Web) gets a proper connect.Error instead of a JSON 401 body. It must be
-// a full Interceptor: a UnaryInterceptorFunc passes streaming calls through
-// untouched, which would leave a stream like WatchCourse unauthenticated.
-func RPCAuth(v auth.Verifier, res rbac.PermissionResolver, perm string) connect.Interceptor {
-	return &rpcAuth{verifier: v, resolver: res, perm: perm}
+// WrapMux returns a mux for connecthttp.Mount that registers every route on
+// mux behind wrap, so middleware such as ConnectCORS sits in front of all the
+// procedure paths Mount adds. Mount registers plain paths (no method), so
+// CORS preflights reach the wrapper too.
+func WrapMux(mux connecthttp.ServeMux, wrap func(http.Handler) http.Handler) connecthttp.ServeMux {
+	return wrappedMux{mux: mux, wrap: wrap}
 }
 
-type rpcAuth struct {
-	verifier auth.Verifier
-	resolver rbac.PermissionResolver
-	perm     string
+type wrappedMux struct {
+	mux  connecthttp.ServeMux
+	wrap func(http.Handler) http.Handler
+}
+
+func (m wrappedMux) Handle(pattern string, h http.Handler) { m.mux.Handle(pattern, m.wrap(h)) }
+
+// RPCAuth verifies the bearer token and the permission for every call on the
+// server it is installed on. A v2 interceptor wraps the whole call, unary and
+// streaming alike, and runs before the request body is read, so a call with
+// no valid token is rejected from its headers alone. Error messages are
+// fixed text; causes stay server-side (RPCLog logs them).
+func RPCAuth(v auth.Verifier, res rbac.PermissionResolver, perm string) connect.ServerInterceptor {
+	return func(next connect.ServerFunc) connect.ServerFunc {
+		return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
+			info, ok := connect.CallInfoForServerContext(ctx)
+			if !ok {
+				return connect.NewError(connect.CodeInternal, "internal error")
+			}
+			ctx, err := authorize(ctx, v, res, perm, info.RequestHeader().Get("Authorization"))
+			if err != nil {
+				return err
+			}
+			return next(ctx, spec, stream)
+		}
+	}
 }
 
 // authorize returns ctx carrying the caller id, or the connect error to send.
-func (a *rpcAuth) authorize(ctx context.Context, header http.Header) (context.Context, error) {
-	h := header.Get("Authorization")
-	if !strings.HasPrefix(h, "Bearer ") {
-		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("missing bearer token"))
+func authorize(ctx context.Context, v auth.Verifier, res rbac.PermissionResolver, perm, header string) (context.Context, error) {
+	if !strings.HasPrefix(header, "Bearer ") {
+		return nil, connect.NewError(connect.CodeUnauthenticated, "missing bearer token")
 	}
-	claims, err := a.verifier.Verify(strings.TrimPrefix(h, "Bearer "))
+	claims, err := v.Verify(strings.TrimPrefix(header, "Bearer "))
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, err)
+		return nil, connect.NewError(connect.CodeUnauthenticated, "invalid or expired token").WithCause(err)
 	}
-	ok, err := a.resolver.Can(ctx, claims.UserID, a.perm)
+	ok, err := res.Can(ctx, claims.UserID, perm)
 	switch {
 	case errors.Is(err, rbac.ErrNoRole):
-		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("no role assigned"))
+		return nil, connect.NewError(connect.CodePermissionDenied, "no role assigned")
 	case err != nil:
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, connect.NewError(connect.CodeInternal, "permission check failed").WithCause(err)
 	case !ok:
-		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("missing permission: "+a.perm))
+		return nil, connect.NewError(connect.CodePermissionDenied, "missing permission: "+perm)
 	}
 	return context.WithValue(ctx, ctxUserID, claims.UserID), nil
 }
 
-func (a *rpcAuth) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		ctx, err := a.authorize(ctx, req.Header())
-		if err != nil {
-			return nil, err
-		}
-		return next(ctx, req)
-	}
-}
-
-// WrapStreamingClient is a no-op: this interceptor only guards the server.
-func (a *rpcAuth) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
-	return next
-}
-
-func (a *rpcAuth) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
-	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
-		ctx, err := a.authorize(ctx, conn.RequestHeader())
-		if err != nil {
+// RPCLog writes one line per call, unary or streaming: the procedure, the
+// connect code ("ok" on success), the wall time (a stream's whole life), and
+// on failure the error plus its server-side cause, which v2 never sends to
+// the client. Mount it before RPCAuth so denied calls are logged too.
+func RPCLog(logger *slog.Logger) connect.ServerInterceptor {
+	return func(next connect.ServerFunc) connect.ServerFunc {
+		return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) error {
+			start := time.Now()
+			err := next(ctx, spec, stream)
+			attrs := []any{
+				"procedure", spec.Procedure,
+				"code", "ok",
+				"duration_ms", time.Since(start).Milliseconds(),
+			}
+			if err != nil {
+				attrs[3] = connect.CodeOf(err).String()
+				attrs = append(attrs, "error", err.Error())
+				if cause := errors.Unwrap(err); cause != nil {
+					attrs = append(attrs, "cause", cause.Error())
+				}
+			}
+			logger.InfoContext(ctx, "rpc", attrs...)
 			return err
 		}
-		return next(ctx, conn)
 	}
 }
 
-// RPCLog writes one line per call, unary or streaming: the procedure, the
-// connect code ("ok" on success) and the wall time (a stream's whole life).
-// Mount it before RPCAuth so denied calls are logged too; the error text is
-// logged only for failures.
-func RPCLog(logger *slog.Logger) connect.Interceptor {
-	return &rpcLog{logger: logger}
-}
-
-type rpcLog struct{ logger *slog.Logger }
-
-func (l *rpcLog) log(ctx context.Context, procedure string, start time.Time, err error) {
-	attrs := []any{
-		"procedure", procedure,
-		"code", "ok",
-		"duration_ms", time.Since(start).Milliseconds(),
-	}
-	if err != nil {
-		attrs[3] = connect.CodeOf(err).String()
-		attrs = append(attrs, "error", err.Error())
-	}
-	l.logger.InfoContext(ctx, "rpc", attrs...)
-}
-
-func (l *rpcLog) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		start := time.Now()
-		res, err := next(ctx, req)
-		l.log(ctx, req.Spec().Procedure, start, err)
-		return res, err
-	}
-}
-
-// WrapStreamingClient is a no-op: only server calls are logged.
-func (l *rpcLog) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
-	return next
-}
-
-func (l *rpcLog) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
-	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
-		start := time.Now()
-		err := next(ctx, conn)
-		l.log(ctx, conn.Spec().Procedure, start, err)
-		return err
+// RPCRecover turns a panic in anything it wraps into CodeInternal instead of
+// a dropped connection (v1's WithRecover). http.ErrAbortHandler is re-panicked
+// so net/http still aborts the response, as it must.
+func RPCRecover() connect.ServerInterceptor {
+	return func(next connect.ServerFunc) connect.ServerFunc {
+		return func(ctx context.Context, spec connect.Spec, stream connect.ServerStream) (err error) {
+			defer func() {
+				r := recover()
+				if r == nil {
+					return
+				}
+				if e, ok := r.(error); ok && errors.Is(e, http.ErrAbortHandler) {
+					panic(r)
+				}
+				err = connect.NewError(connect.CodeInternal, "internal error").
+					WithCause(fmt.Errorf("panic in %s: %v", spec.Procedure, r))
+			}()
+			return next(ctx, spec, stream)
+		}
 	}
 }

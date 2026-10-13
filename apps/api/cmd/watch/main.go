@@ -7,8 +7,10 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -16,7 +18,8 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
 
 	lessonsv1 "github.com/quocdaijr/qdjr-admin/apps/api/internal/gen/lessons/v1"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/gen/lessons/v1/lessonsv1connect"
@@ -47,17 +50,24 @@ func watch(ctx context.Context, baseURL, courseID, token string) error {
 		p.SetUnencryptedHTTP2(true) // gRPC needs HTTP/2; no TLS locally
 		client = &http.Client{Transport: &http.Transport{Protocols: &p}}
 	}
-	c := lessonsv1connect.NewLessonsServiceClient(client, baseURL, connect.WithGRPC())
-	req := connect.NewRequest(&lessonsv1.WatchCourseRequest{Id: courseID})
-	req.Header().Set("Authorization", "Bearer "+token)
+	c := lessonsv1connect.NewLessonsServiceClient(connect.NewClient(connecthttp.NewTransport(client, baseURL, connecthttp.WithGRPC())))
+	req := &lessonsv1.WatchCourseRequest{Id: courseID}
+	ctx, info := connect.NewClientContext(ctx)
+	info.RequestHeader().Set("Authorization", "Bearer "+token)
 
 	start := time.Now()
 	stream, err := c.WatchCourse(ctx, req)
 	if err != nil {
 		return err
 	}
-	for stream.Receive() {
-		m := stream.Msg()
+	var streamErr error
+	for {
+		msg, err := stream.Receive()
+		if err != nil {
+			streamErr = err
+			break
+		}
+		m := msg
 		fmt.Printf("%s +%s  %s  %d/%d done\n", time.Now().Format(time.TimeOnly),
 			time.Since(start).Round(time.Second), m.GetCourse().GetTitle(),
 			m.GetCourse().GetDoneCount(), m.GetCourse().GetLessonCount())
@@ -66,7 +76,10 @@ func watch(ctx context.Context, baseURL, courseID, token string) error {
 			fmt.Printf("  %2d  %-11s %s\n", l.GetPosition(), status, l.GetTitle())
 		}
 	}
-	if err := stream.Err(); err != nil && ctx.Err() == nil {
+	if errors.Is(streamErr, io.EOF) {
+		streamErr = nil
+	}
+	if err := streamErr; err != nil && ctx.Err() == nil {
 		return fmt.Errorf("stream ended after %s: %w", time.Since(start).Round(time.Second), err)
 	}
 	fmt.Printf("stream closed after %s\n", time.Since(start).Round(time.Second))

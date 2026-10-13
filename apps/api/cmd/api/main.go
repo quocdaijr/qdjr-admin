@@ -164,8 +164,8 @@ func run() error {
 	// so Gin's CORS and routes are untouched. Auth lives in the RPCAuth
 	// interceptor so gRPC and gRPC-Web callers get proper status codes.
 	mux := http.NewServeMux()
-	lessonsPath, lessonsHandler := lessons.NewConnectHandler(lessonsRepo, apphttp.RPCLog(log), apphttp.RPCAuth(issuer, resolver, "lessons:write"))
-	mux.Handle(lessonsPath, apphttp.ConnectCORS(cfg.CORSOrigins)(lessonsHandler))
+	lessonsServer := lessons.NewServer(lessonsRepo, apphttp.RPCLog(log), apphttp.RPCAuth(issuer, resolver, "lessons:write"))
+	lessons.Mount(apphttp.WrapMux(mux, apphttp.ConnectCORS(cfg.CORSOrigins)), lessonsServer)
 	apphttp.MountDevTools(mux, cfg.Env, lessonsv1connect.LessonsServiceName)
 	mux.Handle("/", r)
 

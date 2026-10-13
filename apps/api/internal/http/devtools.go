@@ -4,7 +4,9 @@ import (
 	"net/http"
 	"net/http/pprof"
 
-	"connectrpc.com/grpcreflect"
+	"connectrpc.com/connect/v2"
+	"connectrpc.com/connect/v2/connecthttp"
+	"connectrpc.com/grpcreflect/v2"
 )
 
 // MountDevTools adds developer endpoints to the outer mux, outside production
@@ -21,9 +23,11 @@ func MountDevTools(mux *http.ServeMux, env string, services ...string) {
 	if env == "production" {
 		return
 	}
-	reflector := grpcreflect.NewStaticReflector(services...)
-	mux.Handle(grpcreflect.NewHandlerV1(reflector))
-	mux.Handle(grpcreflect.NewHandlerV1Alpha(reflector))
+	// Reflection gets its own server so the lessons server's auth does not
+	// apply: grpcurl list/describe work without a token, in dev only.
+	reflection := connect.NewServer()
+	grpcreflect.Register(reflection, grpcreflect.WithNamer(grpcreflect.NamerFunc(func() []string { return services })))
+	connecthttp.Mount(mux, reflection)
 
 	mux.HandleFunc("/debug/pprof/", pprof.Index)
 	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
