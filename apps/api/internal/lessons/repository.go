@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"golang.org/x/sync/errgroup"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -68,32 +70,49 @@ func (r *AdminRepository) ListCourses(ctx context.Context, f ListFilter) ([]Cour
 	}
 	q := strings.TrimSpace(f.Q)
 
-	const listSQL = courseSelect + `
+	// The page and the count are independent reads on separate pooled
+	// connections, so run them concurrently; errgroup cancels the sibling on
+	// the first error. For one admin on free Neon the win is tiny, but it is
+	// the right shape once the dataset or the round-trip grows.
+	var (
+		out   []Course
+		total int
+	)
+	g, gctx := errgroup.WithContext(ctx)
+	g.Go(func() error {
+		const listSQL = courseSelect + `
         WHERE ($1::text = '' OR c.title ILIKE '%' || $1 || '%')
         GROUP BY c.id
         ORDER BY c.updated_at DESC
         LIMIT $2 OFFSET $3`
-	rows, err := r.pool.Query(ctx, listSQL, q, f.PerPage, (f.Page-1)*f.PerPage)
-	if err != nil {
-		return nil, 0, fmt.Errorf("lessons list courses: %w", err)
-	}
-	defer rows.Close()
-	out := make([]Course, 0, f.PerPage)
-	for rows.Next() {
-		c, err := scanCourse(rows)
+		rows, err := r.pool.Query(gctx, listSQL, q, f.PerPage, (f.Page-1)*f.PerPage)
 		if err != nil {
-			return nil, 0, fmt.Errorf("lessons list courses scan: %w", err)
+			return fmt.Errorf("lessons list courses: %w", err)
 		}
-		out = append(out, c)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, 0, fmt.Errorf("lessons list courses iterate: %w", err)
-	}
-
-	const countSQL = `SELECT count(*) FROM public.courses WHERE ($1::text = '' OR title ILIKE '%' || $1 || '%')`
-	var total int
-	if err := r.pool.QueryRow(ctx, countSQL, q).Scan(&total); err != nil {
-		return nil, 0, fmt.Errorf("lessons count courses: %w", err)
+		defer rows.Close()
+		page := make([]Course, 0, f.PerPage)
+		for rows.Next() {
+			c, err := scanCourse(rows)
+			if err != nil {
+				return fmt.Errorf("lessons list courses scan: %w", err)
+			}
+			page = append(page, c)
+		}
+		if err := rows.Err(); err != nil {
+			return fmt.Errorf("lessons list courses iterate: %w", err)
+		}
+		out = page
+		return nil
+	})
+	g.Go(func() error {
+		const countSQL = `SELECT count(*) FROM public.courses WHERE ($1::text = '' OR title ILIKE '%' || $1 || '%')`
+		if err := r.pool.QueryRow(gctx, countSQL, q).Scan(&total); err != nil {
+			return fmt.Errorf("lessons count courses: %w", err)
+		}
+		return nil
+	})
+	if err := g.Wait(); err != nil {
+		return nil, 0, err
 	}
 	return out, total, nil
 }
