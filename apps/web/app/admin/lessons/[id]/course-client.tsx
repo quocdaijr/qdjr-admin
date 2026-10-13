@@ -6,7 +6,7 @@ import { timestampDate } from '@bufbuild/protobuf/wkt';
 import { ChevronDown, ChevronUp, MoreHorizontal } from 'lucide-react';
 import { toast } from 'sonner';
 
-import type { Lesson } from '@/gen/lessons/v1/lessons_pb';
+import { LessonStatus, type GetCourseResponse, type Lesson } from '@/gen/lessons/v1/lessons_pb';
 import { lessonsClient, rpcErrorMessage } from '@/lib/rpc';
 import { LESSON_STATUSES, statusFromKey, statusKey } from '@/lib/lesson-status';
 import { PageHeader } from '@/components/page-header';
@@ -51,11 +51,23 @@ export function CourseClient({ id }: { id: string }) {
     queryClient.invalidateQueries({ queryKey: ['courses'] });
   };
 
+  // Optimistic: the chip and the done count change at once; on failure the
+  // cached course is put back and the error toasts. Always refetch after.
   const statusMutation = useMutation({
     mutationFn: ({ lessonId, key }: { lessonId: string; key: string }) =>
       lessonsClient.updateLesson({ id: lessonId, status: statusFromKey(key) }),
-    onSuccess: invalidate,
-    onError: (err) => toast.error(rpcErrorMessage(err, 'Status change failed')),
+    onMutate: async ({ lessonId, key }) => {
+      const courseKey = ['course', id];
+      await queryClient.cancelQueries({ queryKey: courseKey });
+      const previous = queryClient.getQueryData<GetCourseResponse>(courseKey);
+      if (previous) queryClient.setQueryData(courseKey, withLessonStatus(previous, lessonId, statusFromKey(key)));
+      return { previous };
+    },
+    onError: (err, _vars, context) => {
+      if (context?.previous) queryClient.setQueryData(['course', id], context.previous);
+      toast.error(rpcErrorMessage(err, 'Status change failed'));
+    },
+    onSettled: invalidate,
   });
 
   const reorderMutation = useMutation({
@@ -83,7 +95,9 @@ export function CourseClient({ id }: { id: string }) {
       </div>
     );
   }
-  if (isError) {
+  // A failed background refetch keeps the cached course on screen; only a
+  // first load with nothing to show is replaced by the error.
+  if (isError && !data) {
     return <p className="text-sm text-destructive">{rpcErrorMessage(error, 'Failed to load course')}</p>;
   }
   if (!data?.course) return null;
@@ -261,4 +275,16 @@ export function CourseClient({ id }: { id: string }) {
       </Dialog>
     </div>
   );
+}
+
+/** A new GetCourseResponse with one lesson's status changed and the done count kept in step. */
+function withLessonStatus(data: GetCourseResponse, lessonId: string, status: LessonStatus): GetCourseResponse {
+  const before = data.lessons.find((l) => l.id === lessonId);
+  if (!before || !data.course) return data;
+  const delta = Number(status === LessonStatus.DONE) - Number(before.status === LessonStatus.DONE);
+  return {
+    ...data,
+    course: { ...data.course, doneCount: data.course.doneCount + delta },
+    lessons: data.lessons.map((l) => (l.id === lessonId ? { ...l, status } : l)),
+  };
 }
