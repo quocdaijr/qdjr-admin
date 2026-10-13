@@ -6,7 +6,7 @@ import { Upload, X } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { ApiError } from '@/lib/api';
-import { getAccessToken } from '@/lib/auth';
+import { sendWithSession } from '@/lib/auth';
 import { formatBytes } from '@/lib/format';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -39,36 +39,36 @@ export function UploadDropzone() {
 
         // One multipart request: the API sniffs the type, stores the file and
         // records it. XHR (not fetch) so the bar can show upload progress.
-        const token = await getAccessToken();
-        if (!token) throw new Error('Session expired, sign in again');
-        await new Promise<void>((resolve, reject) => {
-          const form = new FormData();
-          form.append('file', file);
-          const xhr = new XMLHttpRequest();
-          xhr.open('POST', `${process.env.NEXT_PUBLIC_API_URL}/v1/admin/media`);
-          xhr.setRequestHeader('Authorization', `Bearer ${token}`);
-          xhr.upload.onprogress = (e) => {
-            if (e.lengthComputable) {
-              updateItem(id, { progress: Math.round((e.loaded / e.total) * 100) });
-            }
-          };
-          xhr.onload = () => {
-            if (xhr.status >= 200 && xhr.status < 300) {
-              resolve();
-              return;
-            }
-            let message = `Upload failed (${xhr.status})`;
-            try {
-              const body = JSON.parse(xhr.responseText) as { error?: { message?: string } };
-              message = body.error?.message ?? message;
-            } catch {
-              // non-JSON error body: keep the status message
-            }
-            reject(new Error(message));
-          };
-          xhr.onerror = () => reject(new Error('Network error during upload'));
-          xhr.send(form);
-        });
+        const send = (token: string | null) =>
+          new Promise<{ status: number; body: string }>((resolve, reject) => {
+            const form = new FormData();
+            form.append('file', file);
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', `${process.env.NEXT_PUBLIC_API_URL}/v1/admin/media`);
+            if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+            xhr.upload.onprogress = (e) => {
+              if (e.lengthComputable) {
+                updateItem(id, { progress: Math.round((e.loaded / e.total) * 100) });
+              }
+            };
+            xhr.onload = () => resolve({ status: xhr.status, body: xhr.responseText });
+            xhr.onerror = () => reject(new Error('Network error during upload'));
+            xhr.send(form);
+          });
+        // Same session rule as every other call: refresh once on 401, sign out
+        // (and so redirect to /login) if the session cannot be recovered.
+        const res = await sendWithSession(send);
+        if (res.status === 401) throw new Error('Session expired, sign in again');
+        if (res.status < 200 || res.status >= 300) {
+          let message = `Upload failed (${res.status})`;
+          try {
+            const body = JSON.parse(res.body) as { error?: { message?: string } };
+            message = body.error?.message ?? message;
+          } catch {
+            // non-JSON error body: keep the status message
+          }
+          throw new Error(message);
+        }
 
         updateItem(id, { status: 'success', progress: 100 });
         toast.success(`${file.name} uploaded`);

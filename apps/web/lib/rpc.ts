@@ -2,7 +2,7 @@
 // Connect/gRPC instead of REST (docs/adr/0001). Fetch-based, so it runs in the
 // browser and in the OpenNext worker alike. Auth mirrors lib/api.ts: bearer on
 // every call, one refresh-and-retry on Unauthenticated, sign out when the
-// refresh fails.
+// refresh fails or the retried call is refused too.
 import { Code, ConnectError, createClient, type Interceptor } from '@connectrpc/connect';
 import { createConnectTransport } from '@connectrpc/connect-web';
 
@@ -27,7 +27,14 @@ const auth: Interceptor = (next) => async (req) => {
     }
     // Unary only: the request message is a plain object, safe to resend.
     req.header.set('Authorization', `Bearer ${fresh}`);
-    return next(req);
+    try {
+      return await next(req);
+    } catch (retryErr) {
+      // A fresh token was refused too: nothing left to try, end the session
+      // so the layout redirects to /login instead of showing a silent error.
+      if (retryErr instanceof ConnectError && retryErr.code === Code.Unauthenticated) await signOut();
+      throw retryErr;
+    }
   }
 };
 
