@@ -149,7 +149,7 @@ export function CourseClient({ id }: { id: string }) {
                       lesson.title
                     )}
                     {lesson.notes ? (
-                      <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{lesson.notes}</p>
+                      <p className="mt-1 line-clamp-2 max-w-md text-xs text-muted-foreground">{lesson.notes}</p>
                     ) : null}
                   </TableCell>
                   <TableCell>
