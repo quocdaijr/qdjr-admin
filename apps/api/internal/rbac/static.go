@@ -16,6 +16,7 @@ var rolePermissions = map[string][]string{
 		"media:write",
 		"profile:write", "settings:write",
 		"contact:read", "contact:write",
+		"lessons:write",
 		"users:manage",
 	},
 	"editor": {
@@ -24,6 +25,7 @@ var rolePermissions = map[string][]string{
 		"media:write",
 		"profile:write", "settings:write",
 		"contact:read", "contact:write",
+		"lessons:write",
 	},
 	"author": {
 		"posts:write", // ownership enforced by middleware

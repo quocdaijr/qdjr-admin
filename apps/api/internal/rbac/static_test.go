@@ -58,3 +58,13 @@ func TestStatic_Role_Unknown(t *testing.T) {
 	_, err := r.Role(context.Background(), uuid.New())
 	assert.ErrorIs(t, err, ErrNoRole)
 }
+
+func TestStatic_Can_LessonsWrite(t *testing.T) {
+	for role, want := range map[string]bool{"super_admin": true, "editor": true, "author": false} {
+		u := uuid.New()
+		r := NewStatic(&fakeRoleStore{roleByUser: map[uuid.UUID]string{u: role}})
+		ok, err := r.Can(context.Background(), u, "lessons:write")
+		require.NoError(t, err)
+		assert.Equal(t, want, ok, role)
+	}
+}

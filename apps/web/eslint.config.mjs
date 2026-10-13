@@ -15,6 +15,8 @@ const eslintConfig = defineConfig([
     // OpenNext / wrangler build output
     ".open-next/**",
     ".wrangler/**",
+    // buf-generated protobuf/connect code
+    "gen/**",
   ]),
 ]);
 

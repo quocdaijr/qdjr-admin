@@ -21,6 +21,7 @@ import (
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/contact"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/db"
 	apphttp "github.com/quocdaijr/qdjr-admin/apps/api/internal/http"
+	"github.com/quocdaijr/qdjr-admin/apps/api/internal/lessons"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/media"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/migrate"
 	"github.com/quocdaijr/qdjr-admin/apps/api/internal/posts"
@@ -110,6 +111,7 @@ func run() error {
 	}
 	usersRepo := users.NewAdminRepository(pool)
 	accounts := users.NewPGAccounts(pool)
+	lessonsRepo := lessons.NewAdminRepository(pool)
 	loginLimiter := contact.NewLimiterWith(rate.Every(6*time.Second), 10) // ~10/min per IP
 	if created, err := users.SeedAdmin(ctx, accounts, usersRepo, cfg.BootstrapAdminEmail, cfg.BootstrapAdminPassword); err != nil {
 		return fmt.Errorf("seed admin: %w", err)
@@ -156,10 +158,27 @@ func run() error {
 		},
 	})
 
+	// Lessons is served over Connect (gRPC-compatible) on the same port. The
+	// outer mux sends the service prefix to Connect and everything else to Gin,
+	// so Gin's CORS and routes are untouched. Auth lives in the RPCAuth
+	// interceptor so gRPC and gRPC-Web callers get proper status codes.
+	mux := http.NewServeMux()
+	lessonsPath, lessonsHandler := lessons.NewConnectHandler(lessonsRepo, apphttp.RPCAuth(issuer, resolver, "lessons:write"))
+	mux.Handle(lessonsPath, apphttp.ConnectCORS(cfg.CORSOrigins)(lessonsHandler))
+	mux.Handle("/", r)
+
+	// h2c lets native gRPC clients (grpcurl -plaintext) reach the handler
+	// locally. Render terminates TLS and forwards HTTP/1.1, where Connect's
+	// unary RPCs still work.
+	var protocols http.Protocols
+	protocols.SetHTTP1(true)
+	protocols.SetUnencryptedHTTP2(true)
+
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
-		Handler:           r,
+		Handler:           mux,
 		ReadHeaderTimeout: 5 * time.Second,
+		Protocols:         &protocols,
 	}
 	errCh := make(chan error, 1)
 	go func() {

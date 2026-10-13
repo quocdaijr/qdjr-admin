@@ -67,7 +67,12 @@ func RequirePermission(res rbac.PermissionResolver, perm string) gin.HandlerFunc
 
 // UserIDFromContext returns the authenticated caller's id (set by RequireAuth).
 func UserIDFromContext(c *gin.Context) (uuid.UUID, bool) {
-	v := c.Request.Context().Value(ctxUserID)
-	id, ok := v.(uuid.UUID)
+	return UserIDFrom(c.Request.Context())
+}
+
+// UserIDFrom reads the caller id stored by RequireAuth (Gin) or RPCAuth
+// (Connect) from a plain context.
+func UserIDFrom(ctx context.Context) (uuid.UUID, bool) {
+	id, ok := ctx.Value(ctxUserID).(uuid.UUID)
 	return id, ok
 }

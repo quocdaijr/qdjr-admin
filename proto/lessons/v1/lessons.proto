@@ -1,0 +1,124 @@
+syntax = "proto3";
+
+package lessons.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/quocdaijr/qdjr-admin/apps/api/internal/gen/lessons/v1;lessonsv1";
+
+// Self-study tracker: a Course is one external thing being studied; a Lesson
+// is one ordered unit of it. Progress (done/total) is derived, never stored.
+
+enum LessonStatus {
+  LESSON_STATUS_UNSPECIFIED = 0;
+  LESSON_STATUS_TODO = 1;
+  LESSON_STATUS_IN_PROGRESS = 2;
+  LESSON_STATUS_DONE = 3;
+}
+
+message Course {
+  string id = 1;
+  string title = 2;
+  string url = 3;
+  string provider = 4;
+  string notes = 5;
+  int32 lesson_count = 6;
+  int32 done_count = 7;
+  google.protobuf.Timestamp created_at = 8;
+  google.protobuf.Timestamp updated_at = 9;
+}
+
+message Lesson {
+  string id = 1;
+  string course_id = 2;
+  string title = 3;
+  string url = 4;
+  int32 position = 5;
+  LessonStatus status = 6;
+  string notes = 7;
+  optional google.protobuf.Timestamp completed_at = 8;
+  google.protobuf.Timestamp created_at = 9;
+  google.protobuf.Timestamp updated_at = 10;
+}
+
+message ListCoursesRequest {
+  int32 page = 1;
+  int32 per_page = 2;
+  string q = 3;
+}
+message ListCoursesResponse {
+  repeated Course courses = 1;
+  int32 total = 2;
+}
+
+message GetCourseRequest {
+  string id = 1;
+}
+message GetCourseResponse {
+  Course course = 1;
+  repeated Lesson lessons = 2; // ordered by position
+}
+
+message CreateCourseRequest {
+  string title = 1;
+  string url = 2;
+  string provider = 3;
+  string notes = 4;
+}
+message CreateCourseResponse {
+  Course course = 1;
+}
+
+message UpdateCourseRequest {
+  string id = 1;
+  optional string title = 2;
+  optional string url = 3;
+  optional string provider = 4;
+  optional string notes = 5;
+}
+message UpdateCourseResponse {
+  Course course = 1;
+}
+
+message DeleteCourseRequest {
+  string id = 1;
+}
+message DeleteCourseResponse {}
+
+message CreateLessonRequest {
+  string course_id = 1;
+  string title = 2;
+  string url = 3;
+  string notes = 4;
+}
+message CreateLessonResponse {
+  Lesson lesson = 1;
+}
+
+message UpdateLessonRequest {
+  string id = 1;
+  optional string title = 2;
+  optional string url = 3;
+  optional string notes = 4;
+  optional LessonStatus status = 5;
+  optional int32 position = 6;
+}
+message UpdateLessonResponse {
+  Lesson lesson = 1;
+}
+
+message DeleteLessonRequest {
+  string id = 1;
+}
+message DeleteLessonResponse {}
+
+service LessonsService {
+  rpc ListCourses(ListCoursesRequest) returns (ListCoursesResponse);
+  rpc GetCourse(GetCourseRequest) returns (GetCourseResponse);
+  rpc CreateCourse(CreateCourseRequest) returns (CreateCourseResponse);
+  rpc UpdateCourse(UpdateCourseRequest) returns (UpdateCourseResponse);
+  rpc DeleteCourse(DeleteCourseRequest) returns (DeleteCourseResponse);
+  rpc CreateLesson(CreateLessonRequest) returns (CreateLessonResponse);
+  rpc UpdateLesson(UpdateLessonRequest) returns (UpdateLessonResponse);
+  rpc DeleteLesson(DeleteLessonRequest) returns (DeleteLessonResponse);
+}
