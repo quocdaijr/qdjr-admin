@@ -3,6 +3,7 @@ package lessons
 import (
 	"bytes"
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -53,6 +54,8 @@ type stubRepo struct {
 	updateLessonIn UpdateLessonInput
 	reorderIDs     []uuid.UUID
 	reorderErr     error
+	updateCourseIn UpdateCourseInput
+	failWith       error // when set, UpdateLesson returns it (exercises mapErr)
 }
 
 func newStubRepo() *stubRepo {
@@ -103,6 +106,7 @@ func (s *stubRepo) CreateCourse(_ context.Context, in CreateCourseInput) (Course
 func (s *stubRepo) UpdateCourse(_ context.Context, id uuid.UUID, in UpdateCourseInput) (Course, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.updateCourseIn = in
 	c, ok := s.courses[id]
 	if !ok {
 		return Course{}, ErrNotFound
@@ -149,6 +153,9 @@ func (s *stubRepo) UpdateLesson(_ context.Context, id uuid.UUID, in UpdateLesson
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.updateLessonIn = in
+	if s.failWith != nil {
+		return Lesson{}, s.failWith
+	}
 	l, ok := s.lessons[id]
 	if !ok {
 		return Lesson{}, ErrNotFound
@@ -612,4 +619,172 @@ func TestRPC_WatchCourse_KeepaliveResendsWhenIdle(t *testing.T) {
 	assert.GreaterOrEqual(t, time.Since(first), 80*time.Millisecond, "keepalive came too early")
 	assert.Equal(t, "idle", stream.Msg().GetCourse().GetTitle())
 	require.NoError(t, stream.Close())
+}
+
+func TestCleanTitle_Table(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string // "" means rejected
+	}{
+		{"empty", "", ""},
+		{"whitespace only", " \t\n ", ""},
+		{"trims surrounding space", "  Effective Go  ", "Effective Go"},
+		{"exactly 200 runes", strings.Repeat("a", 200), strings.Repeat("a", 200)},
+		{"201 runes", strings.Repeat("a", 201), ""},
+		{"200 two-byte runes (400 bytes)", strings.Repeat("é", 200), strings.Repeat("é", 200)},
+		{"200 emoji (800 bytes)", strings.Repeat("🦀", 200), strings.Repeat("🦀", 200)},
+		{"201 emoji", strings.Repeat("🦀", 201), ""},
+		{"200 runes plus padding", "  " + strings.Repeat("a", 200) + "  ", strings.Repeat("a", 200)},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := cleanTitle(tc.in)
+			if tc.want == "" {
+				assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
+func TestParseID_Table(t *testing.T) {
+	const canonical = "a0000000-0000-4000-8000-000000000001"
+	cases := []struct {
+		name string
+		in   string
+		ok   bool
+	}{
+		{"canonical", canonical, true},
+		{"uppercase", strings.ToUpper(canonical), true},
+		{"braces", "{" + canonical + "}", true},
+		{"urn prefix", "urn:uuid:" + canonical, true},
+		{"empty", "", false},
+		{"not a uuid", "nope", false},
+		{"trailing space", canonical + " ", false},
+		{"one char short", canonical[:35], false},
+	}
+	want := uuid.MustParse(canonical)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := parseID(tc.in)
+			if !tc.ok {
+				assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, want, got, "every accepted form normalises to the same id")
+		})
+	}
+}
+
+// TestRPC_UpdateLesson_Branches walks every branch of the UpdateLesson handler.
+func TestRPC_UpdateLesson_Branches(t *testing.T) {
+	str := func(s string) *string { return &s }
+	i32 := func(n int32) *int32 { return &n }
+	st := func(s lessonsv1.LessonStatus) *lessonsv1.LessonStatus { return &s }
+
+	e := newEnv(t, "lessons:write")
+	c := e.client(t, uuid.New())
+	ctx := context.Background()
+	course, err := c.CreateCourse(ctx, connect.NewRequest(&lessonsv1.CreateCourseRequest{Title: "c"}))
+	require.NoError(t, err)
+	lesson, err := c.CreateLesson(ctx, connect.NewRequest(&lessonsv1.CreateLessonRequest{CourseId: course.Msg.GetCourse().GetId(), Title: "l"}))
+	require.NoError(t, err)
+	id := lesson.Msg.GetLesson().GetId()
+
+	rejected := []struct {
+		name  string
+		req   *lessonsv1.UpdateLessonRequest
+		code  connect.Code
+		field string // "" when no field violation is expected
+	}{
+		{"bad id", &lessonsv1.UpdateLessonRequest{Id: "nope"}, connect.CodeInvalidArgument, ""},
+		{"blank title", &lessonsv1.UpdateLessonRequest{Id: id, Title: str("   ")}, connect.CodeInvalidArgument, "title"},
+		{"unspecified status", &lessonsv1.UpdateLessonRequest{Id: id, Status: st(lessonsv1.LessonStatus_LESSON_STATUS_UNSPECIFIED)}, connect.CodeInvalidArgument, "status"},
+		{"unknown status value", &lessonsv1.UpdateLessonRequest{Id: id, Status: st(lessonsv1.LessonStatus(99))}, connect.CodeInvalidArgument, "status"},
+		{"negative position", &lessonsv1.UpdateLessonRequest{Id: id, Position: i32(-1)}, connect.CodeInvalidArgument, "position"},
+		{"unknown lesson", &lessonsv1.UpdateLessonRequest{Id: uuid.NewString(), Title: str("x")}, connect.CodeNotFound, ""},
+	}
+	for _, tc := range rejected {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := c.UpdateLesson(ctx, connect.NewRequest(tc.req))
+			require.Equal(t, tc.code, connect.CodeOf(err), err)
+			if tc.field != "" {
+				assert.Equal(t, tc.field, fieldOf(t, err))
+			}
+		})
+	}
+
+	t.Run("every optional field passes through, cleaned", func(t *testing.T) {
+		_, err := c.UpdateLesson(ctx, connect.NewRequest(&lessonsv1.UpdateLessonRequest{
+			Id: id, Title: str("  Renamed  "), Url: str("  https://go.dev  "), Notes: str("  kept as is  "),
+			Status: st(lessonsv1.LessonStatus_LESSON_STATUS_IN_PROGRESS), Position: i32(0),
+		}))
+		require.NoError(t, err)
+		in := e.repo.updateLessonIn
+		require.NotNil(t, in.Title)
+		assert.Equal(t, "Renamed", *in.Title)
+		assert.Equal(t, "https://go.dev", *in.URL)
+		assert.Equal(t, "  kept as is  ", *in.Notes, "notes are markdown, not trimmed")
+		assert.Equal(t, StatusInProgress, *in.Status)
+		assert.Equal(t, 0, *in.Position, "0 is a valid position")
+	})
+
+	t.Run("unset fields stay nil", func(t *testing.T) {
+		_, err := c.UpdateLesson(ctx, connect.NewRequest(&lessonsv1.UpdateLessonRequest{Id: id}))
+		require.NoError(t, err)
+		assert.Equal(t, UpdateLessonInput{}, e.repo.updateLessonIn)
+	})
+
+	t.Run("repository failure is Internal", func(t *testing.T) {
+		e.repo.mu.Lock()
+		e.repo.failWith = errors.New("db down")
+		e.repo.mu.Unlock()
+		t.Cleanup(func() { e.repo.mu.Lock(); e.repo.failWith = nil; e.repo.mu.Unlock() })
+		_, err := c.UpdateLesson(ctx, connect.NewRequest(&lessonsv1.UpdateLessonRequest{Id: id}))
+		assert.Equal(t, connect.CodeInternal, connect.CodeOf(err))
+	})
+}
+
+func TestRPC_UpdateCourse_Branches(t *testing.T) {
+	str := func(s string) *string { return &s }
+	e := newEnv(t, "lessons:write")
+	c := e.client(t, uuid.New())
+	ctx := context.Background()
+	course, err := c.CreateCourse(ctx, connect.NewRequest(&lessonsv1.CreateCourseRequest{Title: "c"}))
+	require.NoError(t, err)
+	id := course.Msg.GetCourse().GetId()
+
+	_, err = c.UpdateCourse(ctx, connect.NewRequest(&lessonsv1.UpdateCourseRequest{Id: "nope"}))
+	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err), "bad id")
+	_, err = c.UpdateCourse(ctx, connect.NewRequest(&lessonsv1.UpdateCourseRequest{Id: id, Title: str(" ")}))
+	assert.Equal(t, "title", fieldOf(t, err), "blank title")
+	_, err = c.UpdateCourse(ctx, connect.NewRequest(&lessonsv1.UpdateCourseRequest{Id: uuid.NewString(), Provider: str("x")}))
+	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err), "unknown course")
+
+	res, err := c.UpdateCourse(ctx, connect.NewRequest(&lessonsv1.UpdateCourseRequest{Id: id, Provider: str("  go.dev  "), Url: str(" https://go.dev ")}))
+	require.NoError(t, err)
+	assert.Equal(t, "go.dev", res.Msg.GetCourse().GetProvider())
+	assert.Nil(t, e.repo.updateCourseIn.Title, "title untouched when unset")
+	assert.Equal(t, "https://go.dev", *e.repo.updateCourseIn.URL)
+}
+
+func TestRPC_DeleteLesson_Branches(t *testing.T) {
+	e := newEnv(t, "lessons:write")
+	c := e.client(t, uuid.New())
+	ctx := context.Background()
+	course, err := c.CreateCourse(ctx, connect.NewRequest(&lessonsv1.CreateCourseRequest{Title: "c"}))
+	require.NoError(t, err)
+	lesson, err := c.CreateLesson(ctx, connect.NewRequest(&lessonsv1.CreateLessonRequest{CourseId: course.Msg.GetCourse().GetId(), Title: "l"}))
+	require.NoError(t, err)
+
+	_, err = c.DeleteLesson(ctx, connect.NewRequest(&lessonsv1.DeleteLessonRequest{Id: "nope"}))
+	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	_, err = c.DeleteLesson(ctx, connect.NewRequest(&lessonsv1.DeleteLessonRequest{Id: lesson.Msg.GetLesson().GetId()}))
+	require.NoError(t, err)
+	_, err = c.DeleteLesson(ctx, connect.NewRequest(&lessonsv1.DeleteLessonRequest{Id: lesson.Msg.GetLesson().GetId()}))
+	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err), "second delete")
 }
