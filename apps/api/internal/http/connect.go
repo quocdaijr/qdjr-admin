@@ -3,9 +3,11 @@ package http
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 	"slices"
 	"strings"
+	"time"
 
 	"connectrpc.com/connect"
 
@@ -64,6 +66,29 @@ func RPCAuth(v auth.Verifier, res rbac.PermissionResolver, perm string) connect.
 				return nil, connect.NewError(connect.CodePermissionDenied, errors.New("missing permission: "+perm))
 			}
 			return next(context.WithValue(ctx, ctxUserID, claims.UserID), req)
+		}
+	}
+}
+
+// RPCLog writes one line per unary call: the procedure, the connect code
+// ("ok" on success) and the wall time. Mount it before RPCAuth so denied
+// calls are logged too; the error text is logged only for failures.
+func RPCLog(logger *slog.Logger) connect.UnaryInterceptorFunc {
+	return func(next connect.UnaryFunc) connect.UnaryFunc {
+		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
+			start := time.Now()
+			res, err := next(ctx, req)
+			attrs := []any{
+				"procedure", req.Spec().Procedure,
+				"code", "ok",
+				"duration_ms", time.Since(start).Milliseconds(),
+			}
+			if err != nil {
+				attrs[3] = connect.CodeOf(err).String()
+				attrs = append(attrs, "error", err.Error())
+			}
+			logger.InfoContext(ctx, "rpc", attrs...)
+			return res, err
 		}
 	}
 }
